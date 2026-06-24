@@ -28,6 +28,12 @@ async function readConfig(): Promise<{ cronEnabled?: boolean; agentName?: string
 }
 
 async function checkGatewayReachable(port: number): Promise<boolean> {
+  const cacheMs = Number(process.env.HOMEBOT_GATEWAY_CACHE_MS ?? 10_000);
+  const now = Date.now();
+  if (gatewayCache && now - gatewayCache.at < cacheMs) {
+    return gatewayCache.reachable;
+  }
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2000);
@@ -36,11 +42,16 @@ async function checkGatewayReachable(port: number): Promise<boolean> {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    return res.ok || res.status === 401 || res.status === 404;
+    const reachable = res.ok || res.status === 401 || res.status === 404;
+    gatewayCache = { reachable, at: now };
+    return reachable;
   } catch {
+    gatewayCache = { reachable: false, at: now };
     return false;
   }
 }
+
+let gatewayCache: { reachable: boolean; at: number } | null = null;
 
 export async function buildStatusSnapshot(): Promise<OpenClawStatus> {
   const stateDir = getStateRoot();

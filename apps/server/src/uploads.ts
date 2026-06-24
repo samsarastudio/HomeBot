@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getStateRoot } from "./openclaw/state-root.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -8,9 +9,24 @@ const API_ROOT = join(__dirname, "..", "..");
 
 export function getUploadsRoot(): string {
   const fromEnv = process.env.HOMEBOT_UPLOADS_DIR?.trim();
-  const root = fromEnv ? fromEnv : join(API_ROOT, "uploads");
-  ensureUploadDirs(root);
-  return root;
+  if (fromEnv) {
+    ensureUploadDirs(fromEnv);
+    return fromEnv;
+  }
+
+  try {
+    const stateUploads = join(getStateRoot(), "uploads");
+    if (existsSync(join(getStateRoot(), "openclaw.json")) || existsSync(stateUploads)) {
+      ensureUploadDirs(stateUploads);
+      return stateUploads;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  const fallback = join(API_ROOT, "uploads");
+  ensureUploadDirs(fallback);
+  return fallback;
 }
 
 function ensureUploadDirs(root: string): void {

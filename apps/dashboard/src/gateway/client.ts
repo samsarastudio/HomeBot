@@ -70,13 +70,13 @@ export class GatewayClient {
     });
     this.ws.addEventListener("message", (ev) => this.onMessage(String(ev.data)));
     this.ws.addEventListener("close", () => {
+      const wasConnected = this.connected;
       this.connected = false;
-      this.emit("connection", { connected: false });
+      if (wasConnected) this.emit("connection", { connected: false });
       this.scheduleReconnect();
     });
     this.ws.addEventListener("error", () => {
-      this.connected = false;
-      this.emit("connection", { connected: false });
+      /* status shown via server API — avoid flicker from handshake errors */
     });
   }
 
@@ -157,7 +157,6 @@ export class GatewayClient {
 
     this.request("connect", params, id).catch(() => {
       this.connected = false;
-      this.emit("connection", { connected: false });
     });
   }
 

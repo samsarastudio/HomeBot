@@ -53,9 +53,10 @@ if [[ -f "$CONFIG" ]]; then
   " 2>/dev/null || true)
 fi
 
-{
-  echo "OPENCLAW_STATE_DIR=$STATE_DIR"
-  echo "HOMEBOT_PORT=8080"
+  {
+    echo "OPENCLAW_STATE_DIR=$STATE_DIR"
+    echo "HOMEBOT_UPLOADS_DIR=$STATE_DIR/uploads"
+    echo "HOMEBOT_PORT=8080"
   echo "OPENCLAW_GATEWAY_PORT=18789"
   echo "DISPLAY=:0"
   if [[ -n "$TOKEN" ]]; then

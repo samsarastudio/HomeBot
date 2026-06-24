@@ -9,6 +9,7 @@ const CHECKBOX_RE = /^- \[([ xX])\]\s*(.*)$/;
 const TOKEN_IMG = /\{img:([^}]+)\}/i;
 const TOKEN_ATTACH = /\{attach:([^}]+)\}/i;
 const TOKEN_ATTACH_ALT = /\battach:([^\s|{}]+)/i;
+const MD_IMG = /!\[[^\]]*\]\(([^)]+)\)/;
 
 export function parsePlanSection(content: string): PlanItem[] {
   const lines = content.split(/\r?\n/);
@@ -49,9 +50,15 @@ function extractMediaTokens(body: string): { text: string; image?: string; attac
   let image: string | undefined;
   let attachment: string | undefined;
 
+  const mdMatch = text.match(MD_IMG);
+  if (mdMatch) {
+    image = imageBasename(mdMatch[1]!.trim());
+    text = text.replace(MD_IMG, "").trim();
+  }
+
   const imgMatch = text.match(TOKEN_IMG);
   if (imgMatch) {
-    image = imgMatch[1]!.trim();
+    image = imageBasename(imgMatch[1]!.trim());
     text = text.replace(TOKEN_IMG, "").trim();
   }
 
@@ -69,6 +76,15 @@ function extractMediaTokens(body: string): { text: string; image?: string; attac
 
   text = text.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
   return { text, image, attachment };
+}
+
+function imageBasename(path: string): string {
+  const stripped = path
+    .replace(/^uploads\/images\//i, "")
+    .replace(/^images\//i, "")
+    .replace(/^\/+/, "");
+  const parts = stripped.split(/[/\\]/);
+  return parts[parts.length - 1] ?? stripped;
 }
 
 function enrichPlanItem(item: PlanItem): PlanItem {

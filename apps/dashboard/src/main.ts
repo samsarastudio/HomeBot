@@ -21,8 +21,12 @@ let cronPrompts: CronPrompt[] = [];
 let approval: import("@homebot/shared").ApprovalRequest | null = null;
 let detailItem: PlanItem | null = null;
 let activeNotification: CalendarNotification | null = null;
+let lastOverlayKey = "";
 
 const app = document.getElementById("app")!;
+const mainRoot = el("div", "dashboard-main");
+const overlayRoot = el("div", "overlay-layer");
+app.append(mainRoot, overlayRoot);
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -35,15 +39,47 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function imageBase(filename: string): string {
+  return filename.replace(/\.[^.]+$/, "");
+}
+
+function thumbSrc(item: PlanItem): string | undefined {
+  if (item.archivedImageUrl) return item.archivedImageUrl;
+  if (item.thumbUrl) return item.thumbUrl;
+  if (item.image) return `/api/media/thumb/${encodeURIComponent(imageBase(item.image))}?size=small`;
+  return item.imageUrl;
+}
+
+function fullImageSrc(item: PlanItem): string | undefined {
+  if (item.archivedImageUrl) return item.archivedImageUrl;
+  if (item.imageUrl) return item.imageUrl;
+  if (item.image) return `/api/media/image/${encodeURIComponent(item.image)}`;
+  return undefined;
+}
+
+function itemHasImage(item: PlanItem): boolean {
+  return Boolean(item.image || item.thumbUrl || item.imageUrl || item.archivedImageUrl);
+}
+
+function findPlanItem(data: DashboardData, index: number): PlanItem | undefined {
+  return data.todolist.plan.items.find((i) => i.index === index);
+}
+
 function thumbForItem(item: PlanItem): HTMLElement {
   const wrap = el("div", "plan-thumb");
-  if (item.thumbUrl) {
+  const src = thumbSrc(item);
+  if (src) {
     const img = document.createElement("img");
     img.className = "plan-thumb-img";
-    img.src = item.thumbUrl;
+    img.src = src;
     img.alt = "";
     img.loading = "lazy";
     img.addEventListener("error", () => {
+      const fallback = fullImageSrc(item);
+      if (fallback && img.src !== fallback) {
+        img.src = fallback;
+        return;
+      }
       img.replaceWith(el("div", "plan-thumb-fallback", "◇"));
     });
     wrap.appendChild(img);
@@ -72,7 +108,6 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
       check.classList.add("pulse");
       try {
         await togglePlanItem(item.index, !done);
-        render();
       } catch (err) {
         console.error(err);
       }
@@ -81,7 +116,7 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
     const body = el("button", "plan-body");
     body.type = "button";
 
-    if (item.thumbUrl || item.attachment) {
+    if (itemHasImage(item) || item.attachment) {
       body.appendChild(thumbForItem(item));
     }
 
@@ -93,7 +128,7 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
 
     body.addEventListener("click", () => {
       detailItem = item;
-      render();
+      renderOverlay(true);
     });
 
     row.appendChild(check);
@@ -104,6 +139,20 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
   return container;
 }
 
+function appendDetailImage(body: HTMLElement, item: PlanItem): void {
+  const src = fullImageSrc(item);
+  if (!src) return;
+
+  const img = document.createElement("img");
+  img.className = "detail-image";
+  img.src = src;
+  img.alt = item.title;
+  img.addEventListener("error", () => {
+    img.style.display = "none";
+  });
+  body.appendChild(img);
+}
+
 function renderDetailOverlay(): HTMLElement | null {
   if (!detailItem) return null;
 
@@ -111,7 +160,7 @@ function renderDetailOverlay(): HTMLElement | null {
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) {
       detailItem = null;
-      render();
+      renderOverlay(true);
     }
   });
 
@@ -122,7 +171,7 @@ function renderDetailOverlay(): HTMLElement | null {
   close.type = "button";
   close.addEventListener("click", () => {
     detailItem = null;
-    render();
+    renderOverlay(true);
   });
   header.appendChild(close);
   card.appendChild(header);
@@ -131,17 +180,7 @@ function renderDetailOverlay(): HTMLElement | null {
   if (detailItem.time) body.appendChild(el("div", "detail-time", detailItem.time));
   body.appendChild(el("div", "detail-title", detailItem.title));
   if (detailItem.description) body.appendChild(el("div", "detail-desc", detailItem.description));
-
-  if (detailItem.imageUrl) {
-    const img = document.createElement("img");
-    img.className = "detail-image";
-    img.src = detailItem.imageUrl.replace("size=small", "").replace("/thumb/", "/image/") ||
-      detailItem.imageUrl;
-    if (detailItem.image) {
-      img.src = `/api/media/image/${encodeURIComponent(detailItem.image)}`;
-    }
-    body.appendChild(img);
-  }
+  appendDetailImage(body, detailItem);
 
   if (detailItem.attachmentUrl) {
     const link = el("a", "detail-attachment", `Attachment: ${detailItem.attachment}`);
@@ -159,7 +198,7 @@ function renderDetailOverlay(): HTMLElement | null {
     try {
       await togglePlanItem(detailItem!.index, !detailItem!.done);
       detailItem = null;
-      render();
+      renderOverlay(true);
     } catch (err) {
       console.error(err);
     }
@@ -179,10 +218,10 @@ function renderNotificationOverlay(): HTMLElement | null {
   const kindLabel = activeNotification.kind === "upcoming" ? "UPCOMING" : "NOW";
   card.appendChild(el("div", "overlay-title", kindLabel));
 
-  if (activeNotification.thumbUrl) {
+  if (activeNotification.thumbUrl || activeNotification.imageUrl) {
     const img = document.createElement("img");
     img.className = "notification-thumb";
-    img.src = activeNotification.thumbUrl;
+    img.src = activeNotification.thumbUrl ?? activeNotification.imageUrl!;
     img.alt = "";
     card.appendChild(img);
   }
@@ -201,7 +240,7 @@ function renderNotificationOverlay(): HTMLElement | null {
     const id = activeNotification!.id;
     activeNotification = null;
     await dismissNotification(id).catch(() => {});
-    render();
+    renderOverlay(true);
   });
   actions.appendChild(dismiss);
   card.appendChild(actions);
@@ -228,7 +267,7 @@ function renderApprovalOverlay(): HTMLElement | null {
       if (approval!.kind === "exec") await gateway.resolveExecApproval(approval!.requestId, true);
       else await gateway.resolvePluginApproval(approval!.requestId, true);
       approval = null;
-      render();
+      renderOverlay(true);
     } catch (err) {
       console.error(err);
     }
@@ -240,7 +279,7 @@ function renderApprovalOverlay(): HTMLElement | null {
       if (approval!.kind === "exec") await gateway.resolveExecApproval(approval!.requestId, false);
       else await gateway.resolvePluginApproval(approval!.requestId, false);
       approval = null;
-      render();
+      renderOverlay(true);
     } catch (err) {
       console.error(err);
     }
@@ -266,7 +305,7 @@ function renderCronOverlay(): HTMLElement | null {
   dismiss.type = "button";
   dismiss.addEventListener("click", () => {
     activeCron.dismissed = true;
-    render();
+    renderOverlay(true);
   });
   const actions = el("div", "overlay-actions");
   actions.appendChild(dismiss);
@@ -275,9 +314,37 @@ function renderCronOverlay(): HTMLElement | null {
   return backdrop;
 }
 
+function overlayKey(): string {
+  if (approval) return `approval:${approval.requestId}`;
+  if (activeNotification) return `notif:${activeNotification.id}`;
+  if (detailItem) return `detail:${detailItem.index}:${detailItem.done}:${detailItem.title}`;
+  const activeCron = cronPrompts.find((p) => !p.dismissed && p.status !== "completed");
+  if (activeCron) return `cron:${activeCron.jobId ?? activeCron.id}`;
+  return "";
+}
+
+function buildOverlay(): HTMLElement | null {
+  return (
+    renderApprovalOverlay() ??
+    renderNotificationOverlay() ??
+    (detailItem ? renderDetailOverlay() : null) ??
+    renderCronOverlay()
+  );
+}
+
+function renderOverlay(force = false): void {
+  const key = overlayKey();
+  if (!force && key === lastOverlayKey) return;
+  lastOverlayKey = key;
+  overlayRoot.replaceChildren();
+  const overlay = buildOverlay();
+  if (overlay) overlayRoot.appendChild(overlay);
+}
+
 function renderInfoStrip(): HTMLElement {
   const strip = el("div", "info-strip scroll-themed");
   const gw = el("span", `info-chip ${gatewayOnline ? "online" : "offline"}`);
+  gw.id = "gateway-chip";
   gw.appendChild(el("span", "dot"));
   gw.appendChild(document.createTextNode(gatewayOnline ? "ONLINE" : "OFFLINE"));
   strip.appendChild(gw);
@@ -300,8 +367,8 @@ function renderInfoStrip(): HTMLElement {
   return strip;
 }
 
-function render(): void {
-  app.replaceChildren();
+function renderMain(): void {
+  mainRoot.replaceChildren();
 
   const topBar = el("header", "top-bar");
 
@@ -321,8 +388,8 @@ function render(): void {
   clock.id = "clock";
   topBar.appendChild(clock);
 
-  app.appendChild(topBar);
-  app.appendChild(renderInfoStrip());
+  mainRoot.appendChild(topBar);
+  mainRoot.appendChild(renderInfoStrip());
 
   const grid = el("main", "main-grid");
 
@@ -340,16 +407,24 @@ function render(): void {
   donePanel.appendChild(doneBody);
   grid.appendChild(donePanel);
 
-  app.appendChild(grid);
+  mainRoot.appendChild(grid);
+}
 
-  // Priority: approval > notification > detail > cron
-  const overlay =
-    renderApprovalOverlay() ??
-    renderNotificationOverlay() ??
-    (detailItem ? renderDetailOverlay() : null) ??
-    renderCronOverlay();
+function applyDashboardData(data: DashboardData): void {
+  dashboard = data;
+  gatewayOnline = data.gateway.online;
 
-  if (overlay) app.appendChild(overlay);
+  if (detailItem) {
+    detailItem = findPlanItem(data, detailItem.index) ?? detailItem;
+  }
+
+  if (!activeNotification && data.pending_notifications.length > 0) {
+    activeNotification = data.pending_notifications[0]!;
+    renderOverlay(true);
+  }
+
+  renderMain();
+  renderOverlay();
 }
 
 function bootstrap(): void {
@@ -358,44 +433,32 @@ function bootstrap(): void {
   setupClock();
 
   startLiveDashboard(
-    (data) => {
-      dashboard = data;
-      gatewayOnline = data.gateway.online;
-      if (!activeNotification && data.pending_notifications.length > 0) {
-        activeNotification = data.pending_notifications[0]!;
-      }
-      render();
-    },
+    (data) => applyDashboardData(data),
     (notification) => {
       activeNotification = notification;
-      render();
+      renderOverlay(true);
     },
     5000,
   );
 }
 
 function setupGateway(): void {
-  gateway.on("connection", (payload) => {
-    gatewayOnline = Boolean((payload as { connected?: boolean }).connected);
-    render();
-  });
-
   gateway.on("cron", (payload) => {
     const event = gateway.parseCronEvent(payload);
     if (!event.jobId && !event.id) return;
     cronPrompts.unshift({ ...event, dismissed: false });
     cronPrompts = cronPrompts.slice(0, 10);
-    render();
+    renderOverlay(true);
   });
 
   gateway.on("exec.approval.requested", (payload) => {
     approval = gateway.parseApproval("exec.approval.requested", payload);
-    render();
+    renderOverlay(true);
   });
 
   gateway.on("plugin.approval.requested", (payload) => {
     approval = gateway.parseApproval("plugin.approval.requested", payload);
-    render();
+    renderOverlay(true);
   });
 
   gateway.connect();

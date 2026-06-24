@@ -58,6 +58,26 @@ body {
   overflow: hidden;
 }
 
+.dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.overlay-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.overlay-layer > .overlay-backdrop {
+  pointer-events: auto;
+}
+
 .top-bar {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -410,7 +430,6 @@ body {
   justify-content: center;
   padding: 20px;
   z-index: 100;
-  animation: fadeIn 0.2s ease;
 }
 
 .overlay-card {
