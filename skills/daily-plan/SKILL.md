@@ -19,28 +19,22 @@ memory/YYYY-MM-DD.md
 ## Plan
 - [ ] 09:00 WORKOUT — Gym session
 - [x] 10:00 STANDUP — Daily sync
-- [ ] 14:00 REVIEW PRS — HomeBot {work}
+- [ ] 14:00 REVIEW PRS — HomeBot
 ```
 
 ### Field rules
 
-- **Time** (optional): `HH:MM` or `HH:MM AM/PM`
+- **Time** (optional): `HH:MM` or `HH:MM AM/PM` — editable on the Pi by tapping a row
 - **Title** before ` — ` (em dash); **description** after
 - **Done**: `[x]` / pending `[ ]`
-- **Check-in tag**:
-  - `{work}` — **9:00 AM** (with everything) **and** **11:30 PM**
-  - `{personal}` or no tag — **9:00 AM** (with everything) **and** **6:00 PM**
-  - `{checkin:morning}` — 9 AM only
-  - `{checkin:evening}` — 6 PM only
-
-Three check-ins fire **every day automatically** — see `skills/homebot-checkins/SKILL.md`.
-- **Image**: `{img:file.jpg}` · **Attachment**: `{attach:file.pdf}`
+- **Image**: `{img:file.jpg}` in `uploads/images/`
+- **Attachment**: `{attach:file.pdf}`
 
 ## When to update
 
-- User asks for todos, check-ins, or "what's on the Pi today"
+- User asks for todos or plan changes
 - Tasks completed → flip checkbox to `[x]`
-- New tasks → append with correct `{work}` or personal tag
+- User changes time → update the time prefix on the matching line
 
 ## Example full daily file
 
@@ -49,17 +43,14 @@ Three check-ins fire **every day automatically** — see `skills/homebot-checkin
 
 ## Plan
 - [ ] 08:00 COFFEE — Morning routine
-- [ ] 10:00 GROCERIES — Errands
 - [ ] 14:00 CAMP GEAR — Clean floor
-- [ ] 15:00 REVIEW PRS — OpenClaw {work}
-- [x] 13:00 HOMEBOT — Deployed {work}
+- [ ] 15:00 REVIEW PRS — OpenClaw
 
 ## Notes
-- 9am = work + personal. 6pm = personal. 11:30pm = work. Repeats daily.
+- Tap a row on the Pi to edit time.
 ```
 
 ## Do not
 
 - Put todos only in `MEMORY.md` — use `memory/<today>.md`
 - Remove the `## Plan` header
-- Put work tasks without `{work}` if they should only appear at 11:30 PM

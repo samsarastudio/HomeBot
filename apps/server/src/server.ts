@@ -9,7 +9,7 @@ import { buildStatusSnapshot } from "./openclaw/snapshot.js";
 import { readCronJobs } from "./openclaw/cron.js";
 import { readTasks } from "./openclaw/tasks.js";
 import { listWorkspace, readWorkspaceFile } from "./openclaw/workspace.js";
-import { getPlan, togglePlanItem } from "./plan-file.js";
+import { getPlan, updatePlanItem } from "./plan-file.js";
 import { buildDashboardData } from "./routes/dashboard.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerMediaRoutes } from "./routes/media.js";
@@ -123,12 +123,19 @@ export function createApp(): express.Express {
 
   app.put("/api/plan", async (req, res) => {
     try {
-      const { index, done } = req.body as { index?: number; done?: boolean };
-      if (typeof index !== "number" || typeof done !== "boolean") {
-        res.status(400).json({ error: "index and done are required" });
+      const { index, done, time } = req.body as { index?: number; done?: boolean; time?: string };
+      if (typeof index !== "number") {
+        res.status(400).json({ error: "index is required" });
         return;
       }
-      const plan = await togglePlanItem(index, done);
+      const updates: { done?: boolean; time?: string } = {};
+      if (typeof done === "boolean") updates.done = done;
+      if (typeof time === "string") updates.time = time;
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ error: "done or time is required" });
+        return;
+      }
+      const plan = await updatePlanItem(index, updates);
       const io = getDashboardIo();
       if (io) void broadcastDashboard(io);
       res.json(plan);

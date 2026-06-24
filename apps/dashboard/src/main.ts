@@ -1,5 +1,5 @@
-import type { CalendarNotification, CheckinSlot, DashboardData, PlanItem } from "@homebot/shared";
-import { dismissNotification, exitApp, togglePlanItem } from "./api";
+import type { CalendarNotification, DashboardData, PlanItem } from "@homebot/shared";
+import { dismissNotification, exitApp, togglePlanItem, updatePlanItemTime } from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
 import { ensureFullscreen } from "./fullscreen";
@@ -21,7 +21,6 @@ let cronPrompts: CronPrompt[] = [];
 let approval: import("@homebot/shared").ApprovalRequest | null = null;
 let detailItem: PlanItem | null = null;
 let activeNotification: CalendarNotification | null = null;
-let checkinsPanelOpen = false;
 let lastOverlayKey = "";
 
 const app = document.getElementById("app")!;
@@ -66,6 +65,37 @@ function findPlanItem(data: DashboardData, index: number): PlanItem | undefined 
   return data.todolist.plan.items.find((i) => i.index === index);
 }
 
+function openDetail(item: PlanItem): void {
+  detailItem = item;
+  renderOverlay(true);
+}
+
+function bindTapOpen(el: HTMLElement, item: PlanItem): void {
+  let startY = 0;
+  let startX = 0;
+
+  el.addEventListener(
+    "touchstart",
+    (e) => {
+      startY = e.touches[0]!.clientY;
+      startX = e.touches[0]!.clientX;
+    },
+    { passive: true },
+  );
+
+  el.addEventListener("touchend", (e) => {
+    const dy = Math.abs(e.changedTouches[0]!.clientY - startY);
+    const dx = Math.abs(e.changedTouches[0]!.clientX - startX);
+    if (dy > 12 || dx > 12) return;
+    openDetail(item);
+  });
+
+  el.addEventListener("click", (e) => {
+    if (e.detail === 0) return;
+    openDetail(item);
+  });
+}
+
 function thumbForItem(item: PlanItem): HTMLElement {
   const wrap = el("div", "plan-thumb");
   const src = thumbSrc(item);
@@ -74,7 +104,7 @@ function thumbForItem(item: PlanItem): HTMLElement {
     img.className = "plan-thumb-img";
     img.src = src;
     img.alt = "";
-    img.loading = "lazy";
+    img.draggable = false;
     img.addEventListener("error", () => {
       const fallback = fullImageSrc(item);
       if (fallback && img.src !== fallback) {
@@ -114,23 +144,23 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
       }
     });
 
-    const body = el("button", "plan-body");
-    body.type = "button";
+    const body = el("div", "plan-body");
+    body.setAttribute("role", "button");
+    body.tabIndex = 0;
 
     if (itemHasImage(item) || item.attachment) {
       body.appendChild(thumbForItem(item));
     }
 
     const textWrap = el("div", "plan-text");
-    if (item.time) textWrap.appendChild(el("div", "plan-time", item.time));
+    if (item.time) {
+      textWrap.appendChild(el("div", "plan-time", item.time));
+    }
     textWrap.appendChild(el("div", "plan-title", item.title));
     if (item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
     body.appendChild(textWrap);
 
-    body.addEventListener("click", () => {
-      detailItem = item;
-      renderOverlay(true);
-    });
+    bindTapOpen(body, item);
 
     row.appendChild(check);
     row.appendChild(body);
@@ -148,6 +178,7 @@ function appendDetailImage(body: HTMLElement, item: PlanItem): void {
   img.className = "detail-image";
   img.src = src;
   img.alt = item.title;
+  img.draggable = false;
   img.addEventListener("error", () => {
     img.style.display = "none";
   });
@@ -167,7 +198,7 @@ function renderDetailOverlay(): HTMLElement | null {
 
   const card = el("div", "overlay-card detail-card");
   const header = el("div", "detail-header");
-  header.appendChild(el("div", "overlay-title", "TASK DETAIL"));
+  header.appendChild(el("div", "overlay-title", "EDIT TASK"));
   const close = el("button", "detail-close", "✕");
   close.type = "button";
   close.addEventListener("click", () => {
@@ -178,7 +209,19 @@ function renderDetailOverlay(): HTMLElement | null {
   card.appendChild(header);
 
   const body = el("div", "detail-card-body scroll-themed");
-  if (detailItem.time) body.appendChild(el("div", "detail-time", detailItem.time));
+
+  const timeRow = el("div", "detail-time-row");
+  timeRow.appendChild(el("label", "detail-time-label", "TIME"));
+  const timeInput = document.createElement("input");
+  timeInput.type = "text";
+  timeInput.className = "detail-time-input";
+  timeInput.placeholder = "09:00 or 2:30 PM";
+  timeInput.value = detailItem.time ?? "";
+  timeInput.setAttribute("inputmode", "text");
+  timeInput.autocomplete = "off";
+  timeRow.appendChild(timeInput);
+  body.appendChild(timeRow);
+
   body.appendChild(el("div", "detail-title", detailItem.title));
   if (detailItem.description) body.appendChild(el("div", "detail-desc", detailItem.description));
   appendDetailImage(body, detailItem);
@@ -190,9 +233,21 @@ function renderDetailOverlay(): HTMLElement | null {
     body.appendChild(link);
   }
 
-  body.appendChild(el("div", "detail-meta", `Index ${detailItem.index} · ${detailItem.done ? "Done" : "Pending"}`));
-
   const actions = el("div", "overlay-actions");
+  const saveTime = el("button", "btn btn-dismiss", "SAVE TIME");
+  saveTime.type = "button";
+  saveTime.addEventListener("click", async () => {
+    const time = timeInput.value.trim();
+    if (!time) return;
+    try {
+      await updatePlanItemTime(detailItem!.index, time);
+      detailItem = null;
+      renderOverlay(true);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
   const toggleBtn = el("button", "btn btn-dismiss", detailItem.done ? "MARK PENDING" : "MARK DONE");
   toggleBtn.type = "button";
   toggleBtn.addEventListener("click", async () => {
@@ -204,10 +259,13 @@ function renderDetailOverlay(): HTMLElement | null {
       console.error(err);
     }
   });
-  actions.appendChild(toggleBtn);
+  actions.append(saveTime, toggleBtn);
   card.appendChild(body);
   card.appendChild(actions);
   backdrop.appendChild(card);
+
+  requestAnimationFrame(() => timeInput.focus());
+
   return backdrop;
 }
 
@@ -224,6 +282,7 @@ function renderNotificationOverlay(): HTMLElement | null {
     img.className = "notification-thumb";
     img.src = activeNotification.thumbUrl ?? activeNotification.imageUrl!;
     img.alt = "";
+    img.draggable = false;
     card.appendChild(img);
   }
 
@@ -318,8 +377,7 @@ function renderCronOverlay(): HTMLElement | null {
 function overlayKey(): string {
   if (approval) return `approval:${approval.requestId}`;
   if (activeNotification) return `notif:${activeNotification.id}`;
-  if (checkinsPanelOpen) return "checkins:open";
-  if (detailItem) return `detail:${detailItem.index}:${detailItem.done}:${detailItem.title}`;
+  if (detailItem) return `detail:${detailItem.index}:${detailItem.done}:${detailItem.time}:${detailItem.title}`;
   const activeCron = cronPrompts.find((p) => !p.dismissed && p.status !== "completed");
   if (activeCron) return `cron:${activeCron.jobId ?? activeCron.id}`;
   return "";
@@ -329,7 +387,6 @@ function buildOverlay(): HTMLElement | null {
   return (
     renderApprovalOverlay() ??
     renderNotificationOverlay() ??
-    renderCheckinsOverlay() ??
     (detailItem ? renderDetailOverlay() : null) ??
     renderCronOverlay()
   );
@@ -342,114 +399,6 @@ function renderOverlay(force = false): void {
   overlayRoot.replaceChildren();
   const overlay = buildOverlay();
   if (overlay) overlayRoot.appendChild(overlay);
-}
-
-function formatEventTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function checkinStatus(slot: CheckinSlot, now = Date.now()): "past" | "now" | "soon" | "upcoming" {
-  const start = new Date(slot.startAt).getTime();
-  const diff = start - now;
-  if (diff < -5 * 60_000) return "past";
-  if (diff <= 5 * 60_000) return "now";
-  if (diff <= 30 * 60_000) return "soon";
-  return "upcoming";
-}
-
-function renderCheckinItemRow(item: PlanItem): HTMLElement {
-  const row = el("button", `checkin-item-row${item.done ? " is-done" : ""}`);
-  row.type = "button";
-  row.appendChild(el("span", "checkin-item-mark", item.done ? "✓" : "○"));
-  const text = el("div", "checkin-item-text");
-  if (item.time) text.appendChild(el("span", "checkin-item-time", item.time));
-  text.appendChild(el("span", "checkin-item-title", item.title));
-  row.appendChild(text);
-  row.addEventListener("click", () => {
-    detailItem = item;
-    checkinsPanelOpen = false;
-    renderOverlay(true);
-  });
-  return row;
-}
-
-function renderCheckinsOverlay(): HTMLElement | null {
-  if (!checkinsPanelOpen) return null;
-
-  const backdrop = el("div", "overlay-backdrop");
-  backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) {
-      checkinsPanelOpen = false;
-      renderOverlay(true);
-    }
-  });
-
-  const card = el("div", "overlay-card checkins-detail-card");
-  const header = el("div", "detail-header");
-  header.appendChild(el("div", "overlay-title", "TODAY'S CHECK-INS"));
-  const close = el("button", "detail-close", "✕");
-  close.type = "button";
-  close.addEventListener("click", () => {
-    checkinsPanelOpen = false;
-    renderOverlay(true);
-  });
-  header.appendChild(close);
-  card.appendChild(header);
-
-  const body = el("div", "checkins-detail-body scroll-themed");
-  const slots = dashboard?.checkins ?? [];
-
-  for (const slot of slots) {
-    const section = el("div", `checkin-section checkin-${checkinStatus(slot)}`);
-    const head = el("div", "checkin-section-head");
-    head.appendChild(el("span", "checkin-section-time", slot.time));
-    head.appendChild(el("span", "checkin-section-label", slot.label));
-    const tag =
-      slot.kind === "morning" ? "WORK + PERSONAL" : slot.kind === "evening" ? "PERSONAL" : "WORK";
-    head.appendChild(el("span", "checkin-section-tag", tag));
-    head.appendChild(el("span", "checkin-section-count", `${slot.pendingCount} pending`));
-    section.appendChild(head);
-
-    const list = el("div", "checkin-section-list");
-    if (slot.pending.length === 0 && slot.done.length === 0) {
-      list.appendChild(el("div", "checkin-section-empty", "No items — tag plan lines with {personal} or {work}"));
-    } else {
-      for (const item of slot.pending) list.appendChild(renderCheckinItemRow(item));
-      for (const item of slot.done) list.appendChild(renderCheckinItemRow(item));
-    }
-    section.appendChild(list);
-    body.appendChild(section);
-  }
-
-  card.appendChild(body);
-  backdrop.appendChild(card);
-  return backdrop;
-}
-
-function renderMarquee(): HTMLElement {
-  const bar = el("button", "checkin-marquee");
-  bar.type = "button";
-  bar.title = "Tap to open check-ins";
-
-  const label = el("span", "marquee-label", "CHECK-INS");
-  bar.appendChild(label);
-
-  const viewport = el("div", "marquee-viewport");
-  const track = el("div", "marquee-track");
-  const text =
-    dashboard?.checkin_marquee ||
-    "9:00 AM · personal   ◆   6:00 PM · personal   ◆   11:30 PM · work — tap to view";
-  track.appendChild(el("span", "marquee-text", text));
-  track.appendChild(el("span", "marquee-text", text));
-  viewport.appendChild(track);
-  bar.appendChild(viewport);
-
-  bar.addEventListener("click", () => {
-    checkinsPanelOpen = true;
-    renderOverlay(true);
-  });
-
-  return bar;
 }
 
 function renderInfoStrip(): HTMLElement {
@@ -501,7 +450,6 @@ function renderMain(): void {
 
   mainRoot.appendChild(topBar);
   mainRoot.appendChild(renderInfoStrip());
-  mainRoot.appendChild(renderMarquee());
 
   const grid = el("main", "main-grid");
 

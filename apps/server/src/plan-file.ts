@@ -1,4 +1,4 @@
-import type { CheckinCategory, PlanItem, PlanResponse } from "@homebot/shared";
+import type { PlanItem, PlanResponse } from "@homebot/shared";
 import { readWorkspaceFile, writeWorkspaceFile } from "./openclaw/workspace.js";
 import { todayDateString } from "./openclaw/state-root.js";
 import { attachmentUrl, mediaUrlsForImage } from "./media/urls.js";
@@ -10,10 +10,10 @@ const CHECKBOX_RE = /^- \[([ xX])\]\s*(.*)$/;
 const TOKEN_IMG = /\{img:([^}]+)\}/i;
 const TOKEN_ATTACH = /\{attach:([^}]+)\}/i;
 const TOKEN_ATTACH_ALT = /\battach:([^\s|{}]+)/i;
-const TOKEN_CHECKIN = /\{checkin:([^}]+)\}/i;
-const TOKEN_WORK = /\{work\}/i;
-const TOKEN_PERSONAL = /\{personal\}/i;
+const TOKEN_LEGACY = /\{(?:checkin:[^}]+|work|personal)\}/gi;
 const MD_IMG = /!\[[^\]]*\]\(([^)]+)\)/;
+
+const TRAILING_TOKEN_RES = [TOKEN_IMG, TOKEN_ATTACH, TOKEN_ATTACH_ALT, TOKEN_LEGACY, MD_IMG];
 
 export function parsePlanSection(content: string): PlanItem[] {
   const lines = content.split(/\r?\n/);
@@ -40,7 +40,6 @@ export function parsePlanSection(content: string): PlanItem[] {
       ...parsed,
       done,
       raw: line,
-      checkin: tokens.checkin,
       image: tokens.image,
       attachment: tokens.attachment,
     }));
@@ -50,28 +49,10 @@ export function parsePlanSection(content: string): PlanItem[] {
   return items;
 }
 
-function extractMediaTokens(body: string): {
-  text: string;
-  image?: string;
-  attachment?: string;
-  checkin?: CheckinCategory;
-} {
+function extractMediaTokens(body: string): { text: string; image?: string; attachment?: string } {
   let text = body;
   let image: string | undefined;
   let attachment: string | undefined;
-  let checkin: CheckinCategory | undefined;
-
-  const checkinMatch = text.match(TOKEN_CHECKIN);
-  if (checkinMatch) {
-    checkin = normalizeCheckinCategory(checkinMatch[1]!.trim());
-    text = text.replace(TOKEN_CHECKIN, "").trim();
-  } else if (TOKEN_WORK.test(text)) {
-    checkin = "work";
-    text = text.replace(TOKEN_WORK, "").trim();
-  } else if (TOKEN_PERSONAL.test(text)) {
-    checkin = "personal";
-    text = text.replace(TOKEN_PERSONAL, "").trim();
-  }
 
   const mdMatch = text.match(MD_IMG);
   if (mdMatch) {
@@ -97,16 +78,41 @@ function extractMediaTokens(body: string): {
     }
   }
 
-  text = text.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
-  return { text, image, attachment, checkin: checkin ?? "personal" };
+  text = text.replace(TOKEN_LEGACY, "").replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
+  return { text, image, attachment };
 }
 
-function normalizeCheckinCategory(raw: string): CheckinCategory {
-  const v = raw.toLowerCase().replace(/\s+/g, "");
-  if (["work", "job", "office", "11:30", "11:30pm", "1130", "night"].includes(v)) return "work";
-  if (["morning", "9am", "09:00", "9:00", "am"].includes(v)) return "morning";
-  if (["evening", "6pm", "18:00", "6:00", "pm"].includes(v)) return "evening";
-  return "personal";
+function splitBodyAndSuffix(body: string): { core: string; suffix: string } {
+  let text = body.trim();
+  const suffixParts: string[] = [];
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const re of TRAILING_TOKEN_RES) {
+      const match = text.match(re);
+      if (match) {
+        suffixParts.push(match[0]);
+        text = text.replace(re, "").trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  return { core: text.replace(/\s+/g, " ").trim(), suffix: suffixParts.join(" ") };
+}
+
+function buildPlanBody(
+  time: string | undefined,
+  title: string,
+  description: string | undefined,
+  suffix: string,
+): string {
+  let core = time?.trim() ? `${time.trim()} ` : "";
+  core += title;
+  if (description) core += ` — ${description}`;
+  return suffix ? `${core} ${suffix}`.trim() : core.trim();
 }
 
 function imageBasename(path: string): string {
@@ -177,13 +183,15 @@ export async function getReferencedMediaFilenames(): Promise<Set<string>> {
   return refs;
 }
 
-export async function togglePlanItem(index: number, done: boolean, date = new Date()): Promise<PlanResponse> {
+export async function updatePlanItem(
+  index: number,
+  updates: { done?: boolean; time?: string },
+  date = new Date(),
+): Promise<PlanResponse> {
   const path = planMemoryPath(date);
   const file = await readWorkspaceFile(path);
 
-  if (!file.exists) {
-    throw new Error("Plan file does not exist");
-  }
+  if (!file.exists) throw new Error("Plan file does not exist");
 
   const lines = file.content.split(/\r?\n/);
   const start = lines.findIndex((l) => l.trim() === PLAN_HEADER);
@@ -195,11 +203,17 @@ export async function togglePlanItem(index: number, done: boolean, date = new Da
   for (let i = start + 1; i < lines.length; i++) {
     const line = lines[i]!;
     if (line.startsWith("## ") && line.trim() !== PLAN_HEADER) break;
-    if (!CHECKBOX_RE.test(line)) continue;
+    const match = line.match(CHECKBOX_RE);
+    if (!match) continue;
 
     if (currentIndex === index) {
-      const body = line.replace(CHECKBOX_RE, "$2").trim();
-      lines[i] = `- [${done ? "x" : " "}] ${body}`;
+      const body = match[2]!.trim();
+      const done = updates.done !== undefined ? updates.done : match[1]!.toLowerCase() === "x";
+      const { core, suffix } = splitBodyAndSuffix(body);
+      const parsed = parsePlanLine(core);
+      const time = updates.time !== undefined ? updates.time.trim() : parsed.time;
+      const newBody = buildPlanBody(time || undefined, parsed.title, parsed.description, suffix);
+      lines[i] = `- [${done ? "x" : " "}] ${newBody}`;
       updated = true;
       break;
     }
@@ -210,4 +224,8 @@ export async function togglePlanItem(index: number, done: boolean, date = new Da
 
   await writeWorkspaceFile(path, lines.join("\n"));
   return getPlan(date);
+}
+
+export async function togglePlanItem(index: number, done: boolean, date = new Date()): Promise<PlanResponse> {
+  return updatePlanItem(index, { done }, date);
 }

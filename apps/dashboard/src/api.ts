@@ -13,6 +13,19 @@ export async function togglePlanItem(index: number, done: boolean): Promise<Plan
   return res.json() as Promise<PlanResponse>;
 }
 
+export async function updatePlanItemTime(index: number, time: string): Promise<PlanResponse> {
+  const res = await fetch("/api/plan", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index, time }),
+  });
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to update time");
+  }
+  return res.json() as Promise<PlanResponse>;
+}
+
 export async function dismissNotification(id: string): Promise<void> {
   await fetch("/api/notifications/dismiss", {
     method: "POST",
