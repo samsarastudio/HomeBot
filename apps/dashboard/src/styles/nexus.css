@@ -261,6 +261,110 @@ body {
   min-height: 0;
 }
 
+.checkins-panel {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 14px;
+  background: rgba(12, 10, 28, 0.75);
+  flex-shrink: 0;
+  max-height: 120px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.checkins-panel .panel-header {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  color: var(--accent-blue);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.checkins-body {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.checkins-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.checkin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+  min-width: 180px;
+}
+
+.checkin-row.checkin-past {
+  opacity: 0.45;
+}
+
+.checkin-row.checkin-now {
+  border-color: var(--accent-mint);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.2);
+}
+
+.checkin-row.checkin-soon {
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.checkin-time {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  white-space: nowrap;
+}
+
+.checkin-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.checkin-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.checkin-notes {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.checkin-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(52, 211, 153, 0.2);
+  color: var(--accent-mint);
+  flex-shrink: 0;
+}
+
+.checkin-badge.soon {
+  background: rgba(168, 85, 247, 0.2);
+  color: var(--accent-purple);
+}
+
 .panel {
   border: 1px solid var(--border-glow);
   border-radius: 16px;

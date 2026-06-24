@@ -52,7 +52,10 @@ export function buildNotificationsForEvents(events: CalendarEvent[], now = new D
       const key = firedKey(event.id, kind, remindMin);
 
       if (store.fired.includes(key)) continue;
-      if (nowMs < triggerMs || nowMs > triggerMs + 60_000) continue;
+
+      // Grace window: 5 min for at-time, 2 min for upcoming (scheduler ticks every 60s)
+      const graceMs = remindMin === 0 ? 5 * 60_000 : 2 * 60_000;
+      if (nowMs < triggerMs || nowMs > triggerMs + graceMs) continue;
 
       notifications.push({
         id: key,

@@ -21,9 +21,12 @@ Include a `## Events` section:
 
 ```markdown
 ## Events
-- 10:00 TEAM STANDUP — Daily sync {remind:10,0}
-- 14:00 Q2 REVIEW — Meeting room {remind:10,0} {img:review.png}
+- 9:00 AM Morning check-in {remind:10,0}
+- 6:00 PM Evening check-in {remind:10,0}
+- 11:30 PM Night check-in {remind:10,0}
 ```
+
+Also accepted: `6pm`, `11.30 pm`, `18:00`, with or without em dash before title.
 
 ### Field rules
 

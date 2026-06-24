@@ -1,4 +1,4 @@
-import type { CalendarNotification, DashboardData, PlanItem } from "@homebot/shared";
+import type { CalendarEvent, CalendarNotification, DashboardData, PlanItem } from "@homebot/shared";
 import { dismissNotification, exitApp, togglePlanItem } from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
@@ -341,6 +341,55 @@ function renderOverlay(force = false): void {
   if (overlay) overlayRoot.appendChild(overlay);
 }
 
+function formatEventTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function eventStatus(event: CalendarEvent, now = Date.now()): "past" | "now" | "soon" | "upcoming" {
+  const start = new Date(event.startAt).getTime();
+  const diff = start - now;
+  if (diff < -5 * 60_000) return "past";
+  if (diff <= 5 * 60_000) return "now";
+  if (diff <= 30 * 60_000) return "soon";
+  return "upcoming";
+}
+
+function renderCheckinsPanel(): HTMLElement {
+  const panel = el("section", "checkins-panel");
+  panel.appendChild(el("div", "panel-header", "CHECK-INS"));
+
+  const body = el("div", "checkins-body scroll-themed");
+  const events = [...(dashboard?.events ?? [])].sort(
+    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+  );
+
+  if (events.length === 0) {
+    body.appendChild(
+      el(
+        "div",
+        "checkins-empty",
+        "No check-ins today — add a ## Events section to memory/YYYY-MM-DD.md",
+      ),
+    );
+  } else {
+    for (const event of events) {
+      const status = eventStatus(event);
+      const row = el("div", `checkin-row checkin-${status}`);
+      row.appendChild(el("span", "checkin-time", formatEventTime(event.startAt)));
+      const titleWrap = el("div", "checkin-text");
+      titleWrap.appendChild(el("span", "checkin-title", event.title));
+      if (event.notes) titleWrap.appendChild(el("span", "checkin-notes", event.notes));
+      row.appendChild(titleWrap);
+      if (status === "now") row.appendChild(el("span", "checkin-badge", "NOW"));
+      else if (status === "soon") row.appendChild(el("span", "checkin-badge soon", "SOON"));
+      body.appendChild(row);
+    }
+  }
+
+  panel.appendChild(body);
+  return panel;
+}
+
 function renderInfoStrip(): HTMLElement {
   const strip = el("div", "info-strip scroll-themed");
   const gw = el("span", `info-chip ${gatewayOnline ? "online" : "offline"}`);
@@ -390,6 +439,7 @@ function renderMain(): void {
 
   mainRoot.appendChild(topBar);
   mainRoot.appendChild(renderInfoStrip());
+  mainRoot.appendChild(renderCheckinsPanel());
 
   const grid = el("main", "main-grid");
 

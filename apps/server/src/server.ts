@@ -183,7 +183,7 @@ export function startServer(): void {
   });
 
   setInterval(() => void broadcastDashboard(io), REFRESH_MS);
-  setInterval(() => void tickEventScheduler(io), 60_000);
+  setInterval(() => void tickEventScheduler(io), 30_000);
 
   const archiveEnabled = process.env.HOMEBOT_ARCHIVE_ENABLED !== "false";
   if (archiveEnabled) {
