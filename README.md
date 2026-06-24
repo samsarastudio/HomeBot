@@ -24,6 +24,8 @@ Then copy `skills/daily-plan` into `~/.openclaw/workspace/skills/` and ensure to
 - **Fullscreen + Close** — top-left Close button exits the app (returns to Pi desktop)
 - **NEXUS-inspired dark UI** — large touch targets for arm's-length use
 
+**Planned fixes & roadmap:** [FEATURES.md](FEATURES.md) — compact status bar, task detail popups, image archive, calendar notifications.
+
 ## Development
 
 ```bash
