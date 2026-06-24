@@ -80,3 +80,36 @@ export interface ApprovalRequest {
   detail: string;
   requestedAt?: number;
 }
+
+export interface FileListItem {
+  name: string;
+  type: "image" | "document" | "attachment";
+  size: string;
+  url: string;
+  thumbUrl?: string;
+}
+
+export interface DashboardData {
+  todolist: {
+    completed: number;
+    pending: number;
+    plan: PlanResponse;
+  };
+  sessions: {
+    active: number;
+    total: number;
+  };
+  system: {
+    cpu: string;
+    ram: string;
+    disk: string;
+  };
+  cron_jobs: CronJobSummary[];
+  gateway: {
+    online: boolean;
+    port: number;
+  };
+  tasks: OpenClawStatus["tasks"];
+  openclaw: OpenClawStatus;
+  timestamp: string;
+}

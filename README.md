@@ -50,10 +50,13 @@ Open http://localhost:5173 (dev) or http://127.0.0.1:8080 (production build serv
 
 ## Architecture
 
-- **apps/server** — Express, reads `OPENCLAW_STATE_DIR`, serves dashboard static files
-- **apps/dashboard** — Vite SPA, Gateway WebSocket client for live events
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full OpenClaw-aligned data access design (`/api/dashboard/data`, files, media, Socket.IO).
+
+- **apps/server** (`clawbot-api`) — Express, reads `OPENCLAW_STATE_DIR`, Socket.IO live sync
+- **apps/dashboard** (`clawbot-dashboard`) — Vite SPA, polls `/api/dashboard/data` + Gateway WS for approvals
 - **apps/shared** — shared TypeScript types
 
+Primary endpoint: `GET /api/dashboard/data`  
 Gateway WebSocket: `ws://127.0.0.1:18789` with token from URL `#token=...`
 
 ## Skills (for OpenClaw workspace)

@@ -1,15 +1,9 @@
-import type { OpenClawStatus, PlanResponse } from "@homebot/shared";
+import type { DashboardData, PlanResponse } from "@homebot/shared";
 
-export async function fetchStatus(): Promise<OpenClawStatus> {
-  const res = await fetch("/api/openclaw/status");
-  if (!res.ok) throw new Error("Failed to load status");
-  return res.json() as Promise<OpenClawStatus>;
-}
-
-export async function fetchPlan(): Promise<PlanResponse> {
-  const res = await fetch("/api/plan");
-  if (!res.ok) throw new Error("Failed to load plan");
-  return res.json() as Promise<PlanResponse>;
+export async function fetchDashboardData(): Promise<DashboardData> {
+  const res = await fetch("/api/dashboard/data");
+  if (!res.ok) throw new Error("Failed to load dashboard data");
+  return res.json() as Promise<DashboardData>;
 }
 
 export async function togglePlanItem(index: number, done: boolean): Promise<PlanResponse> {

@@ -1,6 +1,7 @@
-import type { ApprovalRequest, GatewayCronEvent, OpenClawStatus, PlanItem, PlanResponse } from "@homebot/shared";
-import { exitApp, fetchPlan, fetchStatus, togglePlanItem } from "./api";
+import type { ApprovalRequest, DashboardData, GatewayCronEvent, PlanItem } from "@homebot/shared";
+import { exitApp, togglePlanItem } from "./api";
 import { gateway } from "./gateway/client";
+import { startLiveDashboard } from "./live-dashboard";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
 import "./styles/nexus.css";
 
@@ -8,8 +9,7 @@ interface CronPrompt extends GatewayCronEvent {
   dismissed?: boolean;
 }
 
-let status: OpenClawStatus | null = null;
-let plan: PlanResponse | null = null;
+let dashboard: DashboardData | null = null;
 let gatewayOnline = false;
 let cronPrompts: CronPrompt[] = [];
 let approval: ApprovalRequest | null = null;
@@ -52,7 +52,7 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
     if (!done) {
       row.addEventListener("click", async () => {
         try {
-          plan = await togglePlanItem(item.index, true);
+          await togglePlanItem(item.index, true);
           render();
         } catch (err) {
           console.error(err);
@@ -61,7 +61,7 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
     } else {
       row.addEventListener("click", async () => {
         try {
-          plan = await togglePlanItem(item.index, false);
+          await togglePlanItem(item.index, false);
           render();
         } catch (err) {
           console.error(err);
@@ -180,15 +180,22 @@ function render(): void {
   onlineChip.appendChild(document.createTextNode(gatewayOnline ? "Gateway online" : "Gateway offline"));
   statusBar.appendChild(onlineChip);
 
-  const cronCount = status?.cron.enabled ?? 0;
+  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
   statusBar.appendChild(el("div", "chip", `${cronCount} cron jobs`));
 
-  const running = status?.tasks.running ?? 0;
+  const running = dashboard?.tasks.running ?? 0;
   statusBar.appendChild(el("div", "chip", `${running} running`));
 
-  const doneCount = plan?.doneCount ?? 0;
-  const total = plan?.total ?? 0;
+  const doneCount = dashboard?.todolist.completed ?? 0;
+  const total = (dashboard?.todolist.completed ?? 0) + (dashboard?.todolist.pending ?? 0);
   statusBar.appendChild(el("div", "chip", `${doneCount}/${total} done`));
+
+  const sys = dashboard?.system;
+  if (sys) {
+    statusBar.appendChild(el("div", "chip", `CPU ${sys.cpu}`));
+    statusBar.appendChild(el("div", "chip", `RAM ${sys.ram}`));
+    statusBar.appendChild(el("div", "chip", `DISK ${sys.disk}`));
+  }
 
   app.appendChild(statusBar);
 
@@ -197,14 +204,14 @@ function render(): void {
   const pendingPanel = el("section", "panel");
   pendingPanel.appendChild(el("div", "panel-header", "TODAY'S PLAN"));
   const pendingBody = el("div", "panel-body");
-  pendingBody.appendChild(renderPlanItems(plan?.pending ?? [], false));
+  pendingBody.appendChild(renderPlanItems(dashboard?.todolist.plan.pending ?? [], false));
   pendingPanel.appendChild(pendingBody);
   grid.appendChild(pendingPanel);
 
   const donePanel = el("section", "panel");
   donePanel.appendChild(el("div", "panel-header", "DONE TODAY"));
   const doneBody = el("div", "panel-body");
-  doneBody.appendChild(renderPlanItems(plan?.done ?? [], true));
+  doneBody.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true));
   donePanel.appendChild(doneBody);
   grid.appendChild(donePanel);
 
@@ -214,15 +221,23 @@ function render(): void {
   if (overlay) app.appendChild(overlay);
 }
 
-async function refreshData(): Promise<void> {
+async function bootstrap(): Promise<void> {
   try {
-    const [s, p] = await Promise.all([fetchStatus(), fetchPlan()]);
-    status = s;
-    plan = p;
-    render();
-  } catch (err) {
-    console.error("refresh failed", err);
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen().catch(() => {});
+    }
+  } catch {
+    /* optional */
   }
+
+  setupGateway();
+  setupClock();
+
+  startLiveDashboard((data) => {
+    dashboard = data;
+    gatewayOnline = data.gateway.online;
+    render();
+  }, 5000);
 }
 
 function setupGateway(): void {
@@ -258,26 +273,6 @@ function setupClock(): void {
     const clock = document.getElementById("clock");
     if (clock) clock.textContent = formatClock();
   }, 1000);
-}
-
-async function bootstrap(): Promise<void> {
-  try {
-    if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen().catch(() => {});
-    }
-  } catch {
-    /* optional */
-  }
-
-  setupGateway();
-  setupClock();
-  await refreshData();
-  setInterval(() => void refreshData(), 60000);
-  setInterval(() => {
-    if (gateway.isConnected) {
-      void gateway.listTasks().catch(() => {});
-    }
-  }, 30000);
 }
 
 void bootstrap();
