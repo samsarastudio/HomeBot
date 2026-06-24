@@ -1,0 +1,4 @@
+{
+  "cron": { "enabled": true },
+  "gateway": { "port": 18789, "auth": { "mode": "token", "token": "dev-token" } }
+}

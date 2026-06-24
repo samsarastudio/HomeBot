@@ -1,0 +1,15 @@
+[Unit]
+Description=HomeBot Dashboard Server
+After=openclaw-gateway.service
+Wants=openclaw-gateway.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/homebot
+EnvironmentFile=%h/homebot/deploy/env
+ExecStart=/usr/bin/node %h/homebot/apps/server/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

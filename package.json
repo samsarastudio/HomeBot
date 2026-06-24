@@ -1,0 +1,13 @@
+{
+  "name": "homebot",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "pnpm --filter @homebot/shared build && pnpm --filter @homebot/dashboard build && pnpm --filter @homebot/server build",
+    "dev": "pnpm --parallel --filter @homebot/dashboard --filter @homebot/server dev",
+    "start": "pnpm --filter @homebot/server start"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

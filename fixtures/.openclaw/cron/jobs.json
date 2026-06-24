@@ -1,0 +1,10 @@
+{
+  "jobs": [
+    {
+      "jobId": "morning-brief",
+      "name": "Morning Brief",
+      "enabled": true,
+      "schedule": { "kind": "cron", "expr": "0 9 * * *" }
+    }
+  ]
+}

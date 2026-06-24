@@ -1,0 +1,15 @@
+[Unit]
+Description=HomeBot Chromium Touch Dashboard
+After=homebot-server.service graphical-session.target
+Requires=homebot-server.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/homebot/deploy/env
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/chromium-browser --app=__KIOSK_URL__ --noerrdialogs --disable-session-crashed-bubble --window-name=HomeBot
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
