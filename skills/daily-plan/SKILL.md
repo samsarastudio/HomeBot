@@ -34,6 +34,17 @@ Include a `## Plan` section with GitHub-style checkboxes:
 - **Title**: bold task name in ALL CAPS or Title Case before the em dash
 - **Description** (optional): after ` — ` (em dash)
 - **Done**: `[x]` checked; pending: `[ ]`
+- **Image** (optional): `{img:filename.jpg}` — file in `uploads/images/`
+- **Attachment** (optional): `{attach:file.pdf}` or `attach:file.pdf` — file in `uploads/attachments/`
+
+## Events (calendar notifications)
+
+Add a `## Events` section in the same file for timed popups. See `skills/homebot-events/SKILL.md`.
+
+```markdown
+## Events
+- 10:00 TEAM STANDUP — Daily sync {remind:10,0} {img:standup.png}
+```
 
 ## When to update
 
@@ -54,7 +65,7 @@ Include a `## Plan` section with GitHub-style checkboxes:
 # 2026-06-24
 
 ## Plan
-- [ ] 09:00 WORKOUT — Gym session
+- [ ] 09:00 WORKOUT — Gym session {img:workout.jpg}
 - [ ] 11:00 DEEP WORK — HomeBot dashboard
 - [x] 08:00 COFFEE — Morning routine
 

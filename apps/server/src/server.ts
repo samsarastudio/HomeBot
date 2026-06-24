@@ -13,7 +13,10 @@ import { getPlan, togglePlanItem } from "./plan-file.js";
 import { buildDashboardData } from "./routes/dashboard.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerMediaRoutes } from "./routes/media.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
 import { getUploadsRoot } from "./uploads.js";
+import { tickEventScheduler } from "./events/scheduler.js";
+import { runArchive, getArchiveStatus } from "./media/archive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const PORT = Number(process.env.HOMEBOT_PORT ?? 8080);
@@ -65,6 +68,10 @@ export function createApp(): express.Express {
   const mediaRouter = express.Router();
   registerMediaRoutes(mediaRouter);
   app.use("/api/media", mediaRouter);
+
+  const notificationsRouter = express.Router();
+  registerNotificationRoutes(notificationsRouter);
+  app.use("/api/notifications", notificationsRouter);
 
   app.get("/api/openclaw/status", async (_req, res) => {
     try {
@@ -170,11 +177,32 @@ export function startServer(): void {
   dashboardIo = io;
 
   io.on("connection", (socket) => {
-    void broadcastDashboard(io);
+    void broadcastDashboard(io!);
+    void tickEventScheduler(io);
     socket.on("disconnect", () => {});
   });
 
   setInterval(() => void broadcastDashboard(io), REFRESH_MS);
+  setInterval(() => void tickEventScheduler(io), 60_000);
+
+  const archiveEnabled = process.env.HOMEBOT_ARCHIVE_ENABLED !== "false";
+  if (archiveEnabled) {
+    const scheduleArchive = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const status = getArchiveStatus();
+      const lastRun = status.lastRun ? new Date(status.lastRun) : null;
+      const sameDay = lastRun && lastRun.toDateString() === now.toDateString();
+
+      if (hour === 0 && minute < 2 && !sameDay) {
+        void runArchive();
+      }
+    };
+    setInterval(scheduleArchive, 60_000);
+  }
+
+  void tickEventScheduler(io);
 
   httpServer.listen(PORT, "127.0.0.1", () => {
     console.log(`HomeBot API listening on http://127.0.0.1:${PORT}`);

@@ -5,6 +5,12 @@ export interface PlanItem {
   description?: string;
   done: boolean;
   raw: string;
+  image?: string;
+  attachment?: string;
+  thumbUrl?: string;
+  imageUrl?: string;
+  attachmentUrl?: string;
+  archivedImageUrl?: string;
 }
 
 export interface PlanResponse {
@@ -89,6 +95,35 @@ export interface FileListItem {
   thumbUrl?: string;
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  startAt: string;
+  notes?: string;
+  image?: string;
+  remindMinutes: number[];
+  thumbUrl?: string;
+  imageUrl?: string;
+}
+
+export interface CalendarNotification {
+  id: string;
+  eventId: string;
+  kind: "upcoming" | "start";
+  title: string;
+  startAt: string;
+  notes?: string;
+  imageUrl?: string;
+  thumbUrl?: string;
+}
+
+export interface ArchiveStatus {
+  lastRun?: string;
+  lastBytesSaved?: number;
+  lastFilesArchived?: number;
+  lastError?: string;
+}
+
 export interface DashboardData {
   todolist: {
     completed: number;
@@ -110,6 +145,8 @@ export interface DashboardData {
     port: number;
   };
   tasks: OpenClawStatus["tasks"];
+  events: CalendarEvent[];
+  pending_notifications: CalendarNotification[];
   openclaw: OpenClawStatus;
   timestamp: string;
 }

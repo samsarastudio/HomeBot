@@ -1,9 +1,14 @@
 import type { PlanItem, PlanResponse } from "@homebot/shared";
 import { readWorkspaceFile, writeWorkspaceFile } from "./openclaw/workspace.js";
 import { todayDateString } from "./openclaw/state-root.js";
+import { attachmentUrl, mediaUrlsForImage } from "./media/urls.js";
 
 const PLAN_HEADER = "## Plan";
 const CHECKBOX_RE = /^- \[([ xX])\]\s*(.*)$/;
+
+const TOKEN_IMG = /\{img:([^}]+)\}/i;
+const TOKEN_ATTACH = /\{attach:([^}]+)\}/i;
+const TOKEN_ATTACH_ALT = /\battach:([^\s|{}]+)/i;
 
 export function parsePlanSection(content: string): PlanItem[] {
   const lines = content.split(/\r?\n/);
@@ -22,18 +27,59 @@ export function parsePlanSection(content: string): PlanItem[] {
 
     const done = match[1]!.toLowerCase() === "x";
     const body = match[2]!.trim();
-    const parsed = parsePlanLine(body);
+    const tokens = extractMediaTokens(body);
+    const parsed = parsePlanLine(tokens.text);
 
-    items.push({
+    items.push(enrichPlanItem({
       index,
       ...parsed,
       done,
       raw: line,
-    });
+      image: tokens.image,
+      attachment: tokens.attachment,
+    }));
     index++;
   }
 
   return items;
+}
+
+function extractMediaTokens(body: string): { text: string; image?: string; attachment?: string } {
+  let text = body;
+  let image: string | undefined;
+  let attachment: string | undefined;
+
+  const imgMatch = text.match(TOKEN_IMG);
+  if (imgMatch) {
+    image = imgMatch[1]!.trim();
+    text = text.replace(TOKEN_IMG, "").trim();
+  }
+
+  const attachBrace = text.match(TOKEN_ATTACH);
+  if (attachBrace) {
+    attachment = attachBrace[1]!.trim();
+    text = text.replace(TOKEN_ATTACH, "").trim();
+  } else {
+    const attachAlt = text.match(TOKEN_ATTACH_ALT);
+    if (attachAlt) {
+      attachment = attachAlt[1]!.trim();
+      text = text.replace(TOKEN_ATTACH_ALT, "").trim();
+    }
+  }
+
+  text = text.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
+  return { text, image, attachment };
+}
+
+function enrichPlanItem(item: PlanItem): PlanItem {
+  const enriched = { ...item };
+  if (item.image) {
+    Object.assign(enriched, mediaUrlsForImage(item.image));
+  }
+  if (item.attachment) {
+    enriched.attachmentUrl = attachmentUrl(item.attachment);
+  }
+  return enriched;
 }
 
 function parsePlanLine(body: string): Pick<PlanItem, "time" | "title" | "description"> {
@@ -70,6 +116,18 @@ export async function getPlan(date = new Date()): Promise<PlanResponse> {
     total: items.length,
     doneCount: done.length,
   };
+}
+
+export async function getReferencedMediaFilenames(): Promise<Set<string>> {
+  const [plan, events] = await Promise.all([getPlan(), import("./events/parser.js").then((m) => m.parseTodayEvents())]);
+  const refs = new Set<string>();
+  for (const item of plan.items) {
+    if (item.image) refs.add(item.image);
+  }
+  for (const event of events) {
+    if (event.image) refs.add(event.image);
+  }
+  return refs;
 }
 
 export async function togglePlanItem(index: number, done: boolean, date = new Date()): Promise<PlanResponse> {

@@ -1,10 +1,4 @@
-import type { DashboardData, PlanResponse } from "@homebot/shared";
-
-export async function fetchDashboardData(): Promise<DashboardData> {
-  const res = await fetch("/api/dashboard/data");
-  if (!res.ok) throw new Error("Failed to load dashboard data");
-  return res.json() as Promise<DashboardData>;
-}
+import type { PlanResponse } from "@homebot/shared";
 
 export async function togglePlanItem(index: number, done: boolean): Promise<PlanResponse> {
   const res = await fetch("/api/plan", {
@@ -17,6 +11,14 @@ export async function togglePlanItem(index: number, done: boolean): Promise<Plan
     throw new Error(err.error ?? "Failed to update plan");
   }
   return res.json() as Promise<PlanResponse>;
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  await fetch("/api/notifications/dismiss", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
 }
 
 export async function exitApp(): Promise<void> {
