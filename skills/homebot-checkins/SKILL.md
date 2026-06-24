@@ -1,21 +1,21 @@
 ---
 name: homebot-checkins
-description: Categorize daily todos into HomeBot check-in slots (9am, 6pm personal; 11:30pm work).
+description: Categorize daily todos into HomeBot check-in slots (9am all, 6pm personal, 11:30pm work). Repeats every day.
 ---
 
 # HomeBot Daily Check-ins
 
-The Pi dashboard has **three fixed check-ins every day**. Plan items are grouped by tag — not a separate events list.
+**Three check-ins run every calendar day, automatically, forever** — no need to recreate them in `## Events`. The server builds slots from today's `## Plan` each day.
 
-| Time | Slot | What goes here |
+| Time | Slot | What appears |
 |------|------|----------------|
-| **9:00 AM** | Morning check-in | Personal / home todos (default) |
-| **6:00 PM** | Evening check-in | Same personal todos — review what's left |
-| **11:30 PM** | Work check-in | Work / job / office todos only |
+| **9:00 AM** | Morning | **Work + personal** — full day kickoff |
+| **6:00 PM** | Evening | **Personal** only — home/life review |
+| **11:30 PM** | Work | **Work** only — end-of-day work wrap-up |
 
 ## File
 
-`memory/YYYY-MM-DD.md` → `## Plan` section (same as daily todos).
+`memory/YYYY-MM-DD.md` → `## Plan` (new file each day, same rules every day).
 
 ## Tags on plan lines
 
@@ -30,33 +30,36 @@ The Pi dashboard has **three fixed check-ins every day**. Plan items are grouped
 | Tag | Shows at |
 |-----|----------|
 | *(none)* or `{personal}` | 9:00 AM **and** 6:00 PM |
-| `{work}` or `{checkin:work}` | 11:30 PM only |
-| `{checkin:morning}` or `{checkin:9am}` | 9:00 AM only |
-| `{checkin:evening}` or `{checkin:6pm}` | 6:00 PM only |
+| `{work}` or `{checkin:work}` | 9:00 AM **and** 11:30 PM |
+| `{checkin:morning}` | 9:00 AM only |
+| `{checkin:evening}` | 6:00 PM only |
+
+## Daily rhythm (every day)
+
+1. **9 AM** — Popup + marquee: all pending work **and** personal items
+2. **6 PM** — Popup: personal items still open
+3. **11:30 PM** — Popup: work items still open
+
+Completed items (`[x]`) stay visible in the check-in panel but not in popup summaries.
 
 ## When the user chats
 
-**User:** "Add work task: review PRs by tonight"  
-→ `- [ ] REVIEW PRS — OpenClaw repo {work}`
+**User:** "Add work task: review PRs"  
+→ `- [ ] REVIEW PRS — Repo {work}` (shows 9am + 11:30pm)
 
-**User:** "Remind me to call mom today"  
-→ `- [ ] CALL MOM — Personal {personal}` (or no tag)
+**User:** "Call mom today"  
+→ `- [ ] CALL MOM — Personal` (shows 9am + 6pm)
 
-**User:** "What's on my 6pm check-in?"  
-→ List pending plan items tagged personal/evening for today
+**User:** "9am check-in" / "morning check-in"  
+→ List **all** pending personal **and** work items
 
-**User:** "Morning check-in" / "9am check-in"  
-→ List personal items still pending
+**User:** "6pm check-in"  
+→ Personal items only
 
 **User:** "11:30 work check-in"  
-→ List only `{work}` items
-
-## Notifications
-
-At 9:00, 18:00, and 23:30 the dashboard pops up with pending items for that slot (10 min warning + at time). Keep items in `## Plan` with correct tags.
+→ Work items only
 
 ## Do not
 
-- Put check-in todos only in `## Events` — they must be `## Plan` checkboxes with tags
-- Tag personal home tasks with `{work}`
-- Use a separate file per check-in
+- Recreate check-in times in `## Events` each day — they are automatic
+- Put todos only in `## Events` without `## Plan` checkboxes

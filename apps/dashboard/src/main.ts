@@ -404,7 +404,8 @@ function renderCheckinsOverlay(): HTMLElement | null {
     const head = el("div", "checkin-section-head");
     head.appendChild(el("span", "checkin-section-time", slot.time));
     head.appendChild(el("span", "checkin-section-label", slot.label));
-    const tag = slot.kind === "work" ? "WORK" : "PERSONAL";
+    const tag =
+      slot.kind === "morning" ? "WORK + PERSONAL" : slot.kind === "evening" ? "PERSONAL" : "WORK";
     head.appendChild(el("span", "checkin-section-tag", tag));
     head.appendChild(el("span", "checkin-section-count", `${slot.pendingCount} pending`));
     section.appendChild(head);

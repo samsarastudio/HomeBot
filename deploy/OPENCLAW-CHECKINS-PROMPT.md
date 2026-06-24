@@ -1,85 +1,61 @@
-# OpenClaw prompt — HomeBot check-ins
+# OpenClaw prompt — HomeBot check-ins (daily, forever)
 
-Copy this into OpenClaw workspace instructions, `AGENTS.md`, or paste as a one-shot agent task.
+Copy into OpenClaw workspace instructions or use as a one-shot task.
 
 ---
 
-## System behavior
+## Permanent daily schedule
 
-You maintain today's HomeBot dashboard file at `memory/YYYY-MM-DD.md` (today's date).
+These three check-ins **repeat every day** on the Pi dashboard. You only maintain `memory/<TODAY>.md` — the server handles times and popups.
 
-**Check-ins are not separate events.** Every todo is a `## Plan` checkbox tagged for when it should be reviewed on the Pi touchscreen.
+| Time | What the user sees |
+|------|---------------------|
+| **9:00 AM** | **Work + personal** — everything still pending |
+| **6:00 PM** | **Personal** only |
+| **11:30 PM** | **Work** only |
 
-### Fixed daily schedule
-
-| Time | Check-in | Items |
-|------|----------|-------|
-| 9:00 AM | Morning | Personal / home / life (default) |
-| 6:00 PM | Evening | Same personal items — status review |
-| 11:30 PM | Work | Work / job / coding / office only |
-
-### Tagging rules
+## Tags on `## Plan` lines
 
 ```
-{personal}  or no tag  →  9 AM + 6 PM check-ins
-{work}                 →  11:30 PM check-in only
-{checkin:morning}      →  9 AM only
-{checkin:evening}      →  6 PM only
+(no tag) or {personal}  →  9 AM + 6 PM
+{work}                  →  9 AM + 11:30 PM
+{checkin:morning}       →  9 AM only
+{checkin:evening}       →  6 PM only
 ```
 
-### Example `memory/2026-06-24.md`
+## Example (copy pattern every day)
 
 ```markdown
 # 2026-06-24
 
 ## Plan
 - [ ] 08:00 WORKOUT — Gym
-- [ ] 12:00 GROCERIES — Milk and eggs
-- [ ] 14:00 CAMP GEAR — Clean garage floor
-- [ ] 15:00 REVIEW PRS — HomeBot repo {work}
-- [ ] 16:00 STANDUP NOTES — Prep for tomorrow {work}
-- [x] 13:40 HOMEBOT — Server running {work}
+- [ ] 12:00 GROCERIES — Errands
+- [ ] 14:00 REVIEW PRS — HomeBot {work}
+- [ ] 16:00 CAMP GEAR — Garage {personal}
 
 ## Notes
-- Personal items show at 9am and 6pm check-ins on the Pi.
-- Work items show at 11:30pm check-in.
+- 9am = work + personal. 6pm = personal. 11:30pm = work.
 ```
 
-### Chat interpretation
+## Agent rules
 
-When the user mentions tasks in natural language, classify and tag:
+1. **Every day** — create or update `memory/YYYY-MM-DD.md` with today's date.
+2. Classify chat tasks: home/life → personal; job/code/PR/meeting → `{work}`.
+3. **9 AM check-in** always includes both work and personal pending items.
+4. Do **not** add daily check-in rows to `## Events` — automatic forever.
 
-| User says | Tag | Example line |
-|-----------|-----|----------------|
-| chores, gym, family, errands, home | personal (default) | `- [ ] GYM — Session` |
-| work, job, PR, meeting, office, code | work | `- [ ] REVIEW PR — Repo {work}` |
-| "only this evening" | evening | `{checkin:evening}` |
-| "only tomorrow morning" | morning | `{checkin:morning}` |
-
-### Install skills on Pi
+## Install skill
 
 ```bash
-STATE=~/.openclaw
-cp -r ~/homebot/skills/daily-plan "$STATE/workspace/skills/"
-cp -r ~/homebot/skills/homebot-checkins "$STATE/workspace/skills/"
+cp -r ~/homebot/skills/homebot-checkins ~/.openclaw/workspace/skills/
 ```
 
-### After updating memory file
-
-No server restart needed — dashboard polls every 5s. User sees a scrolling **CHECK-INS** marquee; tap opens full panel.
-
----
-
-## One-shot agent task
+## One-shot task
 
 ```
-Read skills/homebot-checkins/SKILL.md in the HomeBot repo.
-
-Update memory/<TODAY>.md:
-1. Ensure ## Plan exists with checkbox todos for today.
-2. Tag personal/home items (default or {personal}) — they appear at 9am and 6pm check-ins.
-3. Tag all work/job items with {work} — they appear at 11:30pm check-in only.
-4. When user adds tasks via chat, always write to ## Plan with the correct tag.
-
-Do not use ## Events for daily check-ins unless it's a one-off meeting outside this model.
+Read skills/homebot-checkins/SKILL.md. Update memory/<TODAY>.md:
+- ## Plan checkboxes with {work} on job tasks, personal untagged on life tasks.
+- 9am check-in = work + personal. 6pm = personal. 11:30pm = work.
+- This repeats every day; only the date file changes.
 ```

@@ -27,15 +27,14 @@ memory/YYYY-MM-DD.md
 - **Time** (optional): `HH:MM` or `HH:MM AM/PM`
 - **Title** before ` — ` (em dash); **description** after
 - **Done**: `[x]` / pending `[ ]`
-- **Check-in tag** (required for work; personal is default):
-  - `{work}` — **11:30 PM** work check-in only
-  - `{personal}` or no tag — **9:00 AM** and **6:00 PM** personal check-ins
+- **Check-in tag**:
+  - `{work}` — **9:00 AM** (with everything) **and** **11:30 PM**
+  - `{personal}` or no tag — **9:00 AM** (with everything) **and** **6:00 PM**
   - `{checkin:morning}` — 9 AM only
   - `{checkin:evening}` — 6 PM only
-- **Image**: `{img:file.jpg}` in `uploads/images/`
-- **Attachment**: `{attach:file.pdf}`
 
-See `skills/homebot-checkins/SKILL.md` for the full check-in model.
+Three check-ins fire **every day automatically** — see `skills/homebot-checkins/SKILL.md`.
+- **Image**: `{img:file.jpg}` · **Attachment**: `{attach:file.pdf}`
 
 ## When to update
 
@@ -56,7 +55,7 @@ See `skills/homebot-checkins/SKILL.md` for the full check-in model.
 - [x] 13:00 HOMEBOT — Deployed {work}
 
 ## Notes
-- Personal → 9am & 6pm check-ins. Work → 11:30pm.
+- 9am = work + personal. 6pm = personal. 11:30pm = work. Repeats daily.
 ```
 
 ## Do not

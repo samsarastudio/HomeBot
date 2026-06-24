@@ -3,9 +3,9 @@ import { todayDateString } from "../openclaw/state-root.js";
 import type { CalendarEvent } from "@homebot/shared";
 
 export const CHECKIN_SCHEDULE = {
-  morning: { hour: 9, minute: 0, label: "Morning check-in", timeLabel: "9:00 AM" },
-  evening: { hour: 18, minute: 0, label: "Evening check-in", timeLabel: "6:00 PM" },
-  work: { hour: 23, minute: 30, label: "Work check-in", timeLabel: "11:30 PM" },
+  morning: { hour: 9, minute: 0, label: "Morning check-in", timeLabel: "9:00 AM", scope: "work + personal" },
+  evening: { hour: 18, minute: 0, label: "Evening check-in", timeLabel: "6:00 PM", scope: "personal" },
+  work: { hour: 23, minute: 30, label: "Work check-in", timeLabel: "11:30 PM", scope: "work" },
 } as const;
 
 export type CheckinKind = keyof typeof CHECKIN_SCHEDULE;
@@ -13,7 +13,7 @@ export type CheckinKind = keyof typeof CHECKIN_SCHEDULE;
 export function slotsForCheckinCategory(category: PlanItem["checkin"]): CheckinKind[] {
   switch (category) {
     case "work":
-      return ["work"];
+      return ["morning", "work"];
     case "morning":
       return ["morning"];
     case "evening":
@@ -84,8 +84,9 @@ export function marqueeText(slots: CheckinSlot[]): string {
   return slots
     .map((s) => {
       const count = s.pendingCount;
-      const tag = s.kind === "work" ? "work" : "personal";
-      return `${s.time} · ${count} ${tag}`;
+      const scope =
+        s.kind === "morning" ? "work+personal" : s.kind === "evening" ? "personal" : "work";
+      return `${s.time} · ${count} ${scope}`;
     })
     .join("   ◆   ");
 }
