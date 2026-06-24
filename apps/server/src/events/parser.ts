@@ -8,7 +8,7 @@ const EVENTS_HEADERS = ["## Events", "## Check-ins", "## Check-Ins", "## CHECK-I
 const TOKEN_REMIND = /\{remind:([^}]+)\}/i;
 const TOKEN_IMG = /\{img:([^}]+)\}/i;
 
-export async function parseTodayEvents(date = new Date()): Promise<CalendarEvent[]> {
+export async function parseExtraEvents(date = new Date()): Promise<CalendarEvent[]> {
   const path = planMemoryPath(date);
   const file = await readWorkspaceFile(path);
   if (!file.exists) return [];
@@ -72,6 +72,9 @@ export async function parseTodayEvents(date = new Date()): Promise<CalendarEvent
 
   return events.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 }
+
+/** @deprecated use parseExtraEvents — daily check-ins come from plan items */
+export const parseTodayEvents = parseExtraEvents;
 
 /** Parse `- 6pm CHECK IN`, `- 11.30 pm CHECK IN`, `- 09:00 Morning check-in` */
 export function parseEventLine(line: string): { timeStr: string; rest: string } | null {

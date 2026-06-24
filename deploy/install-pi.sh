@@ -91,5 +91,5 @@ else
   echo "Kiosk URL:        http://127.0.0.1:8080/"
 fi
 echo ""
-echo "Copy skills/daily-plan to your OpenClaw workspace if desired:"
-echo "  cp -r $HOMEBOT_DIR/skills/daily-plan $STATE_DIR/workspace/skills/"
+echo "Copy skills to your OpenClaw workspace:"
+echo "  cp -r $HOMEBOT_DIR/skills/daily-plan $HOMEBOT_DIR/skills/homebot-checkins $STATE_DIR/workspace/skills/"

@@ -1,3 +1,5 @@
+export type CheckinCategory = "personal" | "work" | "morning" | "evening";
+
 export interface PlanItem {
   index: number;
   time?: string;
@@ -5,6 +7,7 @@ export interface PlanItem {
   description?: string;
   done: boolean;
   raw: string;
+  checkin?: CheckinCategory;
   image?: string;
   attachment?: string;
   thumbUrl?: string;
@@ -95,6 +98,18 @@ export interface FileListItem {
   thumbUrl?: string;
 }
 
+export interface CheckinSlot {
+  id: string;
+  kind: "morning" | "evening" | "work";
+  label: string;
+  time: string;
+  startAt: string;
+  pending: PlanItem[];
+  done: PlanItem[];
+  pendingCount: number;
+  doneCount: number;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -146,6 +161,8 @@ export interface DashboardData {
   };
   tasks: OpenClawStatus["tasks"];
   events: CalendarEvent[];
+  checkins: CheckinSlot[];
+  checkin_marquee: string;
   pending_notifications: CalendarNotification[];
   openclaw: OpenClawStatus;
   timestamp: string;

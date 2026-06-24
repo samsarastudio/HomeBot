@@ -9,55 +9,39 @@ The HomeBot Pi dashboard reads today's todos from the daily memory file.
 
 ## File location
 
-Write and update the plan in:
-
 ```
 memory/YYYY-MM-DD.md
 ```
 
-Use today's date in `YYYY-MM-DD` format (same as OpenClaw's daily memory log).
-
 ## Required format
-
-Include a `## Plan` section with GitHub-style checkboxes:
 
 ```markdown
 ## Plan
 - [ ] 09:00 WORKOUT — Gym session
 - [x] 10:00 STANDUP — Daily sync
-- [ ] 14:00 REVIEW — Open PRs
+- [ ] 14:00 REVIEW PRS — HomeBot {work}
 ```
 
 ### Field rules
 
-- **Time** (optional): `HH:MM` or `HH:MM AM/PM` at the start of the line body
-- **Title**: bold task name in ALL CAPS or Title Case before the em dash
-- **Description** (optional): after ` — ` (em dash)
-- **Done**: `[x]` checked; pending: `[ ]`
-- **Image** (optional): `{img:filename.jpg}` — file in `uploads/images/`
-- **Attachment** (optional): `{attach:file.pdf}` or `attach:file.pdf` — file in `uploads/attachments/`
+- **Time** (optional): `HH:MM` or `HH:MM AM/PM`
+- **Title** before ` — ` (em dash); **description** after
+- **Done**: `[x]` / pending `[ ]`
+- **Check-in tag** (required for work; personal is default):
+  - `{work}` — **11:30 PM** work check-in only
+  - `{personal}` or no tag — **9:00 AM** and **6:00 PM** personal check-ins
+  - `{checkin:morning}` — 9 AM only
+  - `{checkin:evening}` — 6 PM only
+- **Image**: `{img:file.jpg}` in `uploads/images/`
+- **Attachment**: `{attach:file.pdf}`
 
-## Events (calendar notifications)
-
-Add a `## Events` section in the same file for timed popups. See `skills/homebot-events/SKILL.md`.
-
-```markdown
-## Events
-- 10:00 TEAM STANDUP — Daily sync {remind:10,0} {img:standup.png}
-```
+See `skills/homebot-checkins/SKILL.md` for the full check-in model.
 
 ## When to update
 
-- When the user asks for today's plan or todos
-- During morning brief / heartbeat if a plan exists for the day
-- When tasks are completed — flip the matching checkbox to `[x]`
-- When new tasks are added — append new `- [ ]` lines under `## Plan`
-
-## Do not
-
-- Put the plan only in `MEMORY.md` — the dashboard reads `memory/<today>.md`
-- Remove the `## Plan` header — the dashboard parser requires it
-- Use nested lists under Plan — keep a flat checkbox list
+- User asks for todos, check-ins, or "what's on the Pi today"
+- Tasks completed → flip checkbox to `[x]`
+- New tasks → append with correct `{work}` or personal tag
 
 ## Example full daily file
 
@@ -65,10 +49,18 @@ Add a `## Events` section in the same file for timed popups. See `skills/homebot
 # 2026-06-24
 
 ## Plan
-- [ ] 09:00 WORKOUT — Gym session {img:workout.jpg}
-- [ ] 11:00 DEEP WORK — HomeBot dashboard
-- [x] 08:00 COFFEE — Morning routine
+- [ ] 08:00 COFFEE — Morning routine
+- [ ] 10:00 GROCERIES — Errands
+- [ ] 14:00 CAMP GEAR — Clean floor
+- [ ] 15:00 REVIEW PRS — OpenClaw {work}
+- [x] 13:00 HOMEBOT — Deployed {work}
 
 ## Notes
-- User wants focus on Pi deployment today.
+- Personal → 9am & 6pm check-ins. Work → 11:30pm.
 ```
+
+## Do not
+
+- Put todos only in `MEMORY.md` — use `memory/<today>.md`
+- Remove the `## Plan` header
+- Put work tasks without `{work}` if they should only appear at 11:30 PM

@@ -1,4 +1,4 @@
-import type { CalendarEvent, CalendarNotification, DashboardData, PlanItem } from "@homebot/shared";
+import type { CalendarNotification, CheckinSlot, DashboardData, PlanItem } from "@homebot/shared";
 import { dismissNotification, exitApp, togglePlanItem } from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
@@ -21,6 +21,7 @@ let cronPrompts: CronPrompt[] = [];
 let approval: import("@homebot/shared").ApprovalRequest | null = null;
 let detailItem: PlanItem | null = null;
 let activeNotification: CalendarNotification | null = null;
+let checkinsPanelOpen = false;
 let lastOverlayKey = "";
 
 const app = document.getElementById("app")!;
@@ -317,6 +318,7 @@ function renderCronOverlay(): HTMLElement | null {
 function overlayKey(): string {
   if (approval) return `approval:${approval.requestId}`;
   if (activeNotification) return `notif:${activeNotification.id}`;
+  if (checkinsPanelOpen) return "checkins:open";
   if (detailItem) return `detail:${detailItem.index}:${detailItem.done}:${detailItem.title}`;
   const activeCron = cronPrompts.find((p) => !p.dismissed && p.status !== "completed");
   if (activeCron) return `cron:${activeCron.jobId ?? activeCron.id}`;
@@ -327,6 +329,7 @@ function buildOverlay(): HTMLElement | null {
   return (
     renderApprovalOverlay() ??
     renderNotificationOverlay() ??
+    renderCheckinsOverlay() ??
     (detailItem ? renderDetailOverlay() : null) ??
     renderCronOverlay()
   );
@@ -345,8 +348,8 @@ function formatEventTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function eventStatus(event: CalendarEvent, now = Date.now()): "past" | "now" | "soon" | "upcoming" {
-  const start = new Date(event.startAt).getTime();
+function checkinStatus(slot: CheckinSlot, now = Date.now()): "past" | "now" | "soon" | "upcoming" {
+  const start = new Date(slot.startAt).getTime();
   const diff = start - now;
   if (diff < -5 * 60_000) return "past";
   if (diff <= 5 * 60_000) return "now";
@@ -354,40 +357,98 @@ function eventStatus(event: CalendarEvent, now = Date.now()): "past" | "now" | "
   return "upcoming";
 }
 
-function renderCheckinsPanel(): HTMLElement {
-  const panel = el("section", "checkins-panel");
-  panel.appendChild(el("div", "panel-header", "CHECK-INS"));
+function renderCheckinItemRow(item: PlanItem): HTMLElement {
+  const row = el("button", `checkin-item-row${item.done ? " is-done" : ""}`);
+  row.type = "button";
+  row.appendChild(el("span", "checkin-item-mark", item.done ? "✓" : "○"));
+  const text = el("div", "checkin-item-text");
+  if (item.time) text.appendChild(el("span", "checkin-item-time", item.time));
+  text.appendChild(el("span", "checkin-item-title", item.title));
+  row.appendChild(text);
+  row.addEventListener("click", () => {
+    detailItem = item;
+    checkinsPanelOpen = false;
+    renderOverlay(true);
+  });
+  return row;
+}
 
-  const body = el("div", "checkins-body scroll-themed");
-  const events = [...(dashboard?.events ?? [])].sort(
-    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
-  );
+function renderCheckinsOverlay(): HTMLElement | null {
+  if (!checkinsPanelOpen) return null;
 
-  if (events.length === 0) {
-    body.appendChild(
-      el(
-        "div",
-        "checkins-empty",
-        "No check-ins today — add a ## Events section to memory/YYYY-MM-DD.md",
-      ),
-    );
-  } else {
-    for (const event of events) {
-      const status = eventStatus(event);
-      const row = el("div", `checkin-row checkin-${status}`);
-      row.appendChild(el("span", "checkin-time", formatEventTime(event.startAt)));
-      const titleWrap = el("div", "checkin-text");
-      titleWrap.appendChild(el("span", "checkin-title", event.title));
-      if (event.notes) titleWrap.appendChild(el("span", "checkin-notes", event.notes));
-      row.appendChild(titleWrap);
-      if (status === "now") row.appendChild(el("span", "checkin-badge", "NOW"));
-      else if (status === "soon") row.appendChild(el("span", "checkin-badge soon", "SOON"));
-      body.appendChild(row);
+  const backdrop = el("div", "overlay-backdrop");
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      checkinsPanelOpen = false;
+      renderOverlay(true);
     }
+  });
+
+  const card = el("div", "overlay-card checkins-detail-card");
+  const header = el("div", "detail-header");
+  header.appendChild(el("div", "overlay-title", "TODAY'S CHECK-INS"));
+  const close = el("button", "detail-close", "✕");
+  close.type = "button";
+  close.addEventListener("click", () => {
+    checkinsPanelOpen = false;
+    renderOverlay(true);
+  });
+  header.appendChild(close);
+  card.appendChild(header);
+
+  const body = el("div", "checkins-detail-body scroll-themed");
+  const slots = dashboard?.checkins ?? [];
+
+  for (const slot of slots) {
+    const section = el("div", `checkin-section checkin-${checkinStatus(slot)}`);
+    const head = el("div", "checkin-section-head");
+    head.appendChild(el("span", "checkin-section-time", slot.time));
+    head.appendChild(el("span", "checkin-section-label", slot.label));
+    const tag = slot.kind === "work" ? "WORK" : "PERSONAL";
+    head.appendChild(el("span", "checkin-section-tag", tag));
+    head.appendChild(el("span", "checkin-section-count", `${slot.pendingCount} pending`));
+    section.appendChild(head);
+
+    const list = el("div", "checkin-section-list");
+    if (slot.pending.length === 0 && slot.done.length === 0) {
+      list.appendChild(el("div", "checkin-section-empty", "No items — tag plan lines with {personal} or {work}"));
+    } else {
+      for (const item of slot.pending) list.appendChild(renderCheckinItemRow(item));
+      for (const item of slot.done) list.appendChild(renderCheckinItemRow(item));
+    }
+    section.appendChild(list);
+    body.appendChild(section);
   }
 
-  panel.appendChild(body);
-  return panel;
+  card.appendChild(body);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
+function renderMarquee(): HTMLElement {
+  const bar = el("button", "checkin-marquee");
+  bar.type = "button";
+  bar.title = "Tap to open check-ins";
+
+  const label = el("span", "marquee-label", "CHECK-INS");
+  bar.appendChild(label);
+
+  const viewport = el("div", "marquee-viewport");
+  const track = el("div", "marquee-track");
+  const text =
+    dashboard?.checkin_marquee ||
+    "9:00 AM · personal   ◆   6:00 PM · personal   ◆   11:30 PM · work — tap to view";
+  track.appendChild(el("span", "marquee-text", text));
+  track.appendChild(el("span", "marquee-text", text));
+  viewport.appendChild(track);
+  bar.appendChild(viewport);
+
+  bar.addEventListener("click", () => {
+    checkinsPanelOpen = true;
+    renderOverlay(true);
+  });
+
+  return bar;
 }
 
 function renderInfoStrip(): HTMLElement {
@@ -439,7 +500,7 @@ function renderMain(): void {
 
   mainRoot.appendChild(topBar);
   mainRoot.appendChild(renderInfoStrip());
-  mainRoot.appendChild(renderCheckinsPanel());
+  mainRoot.appendChild(renderMarquee());
 
   const grid = el("main", "main-grid");
 

@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CalendarEvent, CalendarNotification } from "@homebot/shared";
 import type { Server as SocketServer } from "socket.io";
-import { parseTodayEvents } from "./parser.js";
+import { getPlan } from "../plan-file.js";
+import { buildDailyCheckinEvents } from "../checkins/build.js";
+import { parseExtraEvents } from "./parser.js";
 import { getUploadsRoot } from "../uploads.js";
 import { todayDateString } from "../openclaw/state-root.js";
 
@@ -99,7 +101,8 @@ export function dismissNotification(id: string): void {
 }
 
 export async function tickEventScheduler(io?: SocketServer): Promise<CalendarNotification[]> {
-  const events = await parseTodayEvents();
+  const plan = await getPlan();
+  const events = [...buildDailyCheckinEvents(plan), ...(await parseExtraEvents())];
   const newOnes = buildNotificationsForEvents(events);
   if (newOnes.length > 0) {
     queueNotifications(newOnes);

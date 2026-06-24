@@ -1,72 +1,17 @@
 ---
 name: homebot-events
-description: Add calendar events to today's memory file for HomeBot timed notifications.
+description: Optional one-off calendar events (not daily check-ins — use homebot-checkins for those).
 ---
 
-# HomeBot Calendar Events
+# HomeBot One-off Events (optional)
 
-The Pi dashboard shows touch notifications **10 minutes before** and **at** each event time.
+**Daily check-ins (9am / 6pm / 11:30pm) come from `## Plan` tags.** See `skills/homebot-checkins/SKILL.md`.
 
-## File location
-
-Add events to today's daily memory file:
-
-```
-memory/YYYY-MM-DD.md
-```
-
-## Format
-
-Include a `## Events` section:
+Use `## Events` only for **extra** timed reminders (meetings, appointments) outside the check-in model:
 
 ```markdown
 ## Events
-- 9:00 AM Morning check-in {remind:10,0}
-- 6:00 PM Evening check-in {remind:10,0}
-- 11:30 PM Night check-in {remind:10,0}
+- 14:00 DENTIST — Downtown clinic {remind:10,0}
 ```
 
-Also accepted: `6pm`, `11.30 pm`, `18:00`, with or without em dash before title.
-
-### Field rules
-
-- **Time**: `HH:MM` or `HH:MM AM/PM` after the list marker
-- **Title**: before the em dash
-- **Notes** (optional): after ` — `
-- **Remind**: `{remind:10,0}` — minutes before start (10 = upcoming, 0 = at start)
-- **Image** (optional): `{img:filename.png}` in `uploads/images/`
-
-## Notification behavior
-
-- Server checks every minute; fires each remind time once per day
-- Dashboard shows a dismissible overlay (`DISMISS` button)
-- Dismissed notifications do not reappear
-- Works while kiosk is open all day
-
-## When to update
-
-- User asks to schedule a meeting or reminder on the Pi display
-- Morning brief: add today's meetings from calendar
-- When meetings are cancelled — remove or comment out the line
-
-## Example full daily file
-
-```markdown
-# 2026-06-24
-
-## Plan
-- [ ] 09:00 WORKOUT — Gym {img:workout.jpg}
-
-## Events
-- 10:00 TEAM STANDUP — Daily sync {remind:10,0}
-- 15:00 DOCTOR — Annual checkup {remind:10,0}
-
-## Notes
-- Standup moved to 10:00
-```
-
-## Do not
-
-- Put events only in external calendar without updating today's file — the dashboard reads `memory/<today>.md`
-- Remove the `## Events` header — the parser requires it
-- Use nested lists under Events
+For normal todos and check-ins, use `## Plan` with `{work}` or `{personal}` instead.
