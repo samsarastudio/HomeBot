@@ -67,7 +67,7 @@ fi
   fi
 } > "$ENV_FILE"
 
-chmod +x "$HOMEBOT_DIR/deploy/launch-kiosk.sh"
+chmod +x "$HOMEBOT_DIR/deploy/launch-kiosk.sh" "$HOMEBOT_DIR/deploy/stop-kiosk.sh" "$HOMEBOT_DIR/deploy/kiosk.sh"
 
 # systemd user units
 mkdir -p "$HOME/.config/systemd/user"

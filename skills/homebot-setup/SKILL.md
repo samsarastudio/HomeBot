@@ -19,15 +19,16 @@ Open `SETUP.md` in the cloned repository. Follow it step by step.
 4. **Skill:** `cp -r ~/homebot/skills/daily-plan ~/.openclaw/workspace/skills/`
 5. **Agent docs:** Add `## HomeBot dashboard` section to `AGENTS.md` (see SETUP.md)
 6. **Plan file:** Ensure `~/.openclaw/workspace/memory/<today>.md` has `## Plan` with `- [ ]` items
-7. **Kiosk:** `systemctl --user start homebot-kiosk`
-8. **Verify:** `curl -s http://127.0.0.1:8080/api/plan` and report dashboard URL from install output
+7. **Kiosk:** `~/homebot/deploy/kiosk.sh restart` — **never** run `chromium` manually
+8. **Verify:** `~/homebot/deploy/kiosk.sh status` shows one process; `curl -s http://127.0.0.1:8080/api/plan`
 
 ## Rules
 
 - Do **not** stop OpenClaw gateway unless it is not running
 - Install to `~/homebot` unless user specifies otherwise (`HOMEBOT_DIR=...`)
 - Gateway token is embedded in kiosk URL as `#token=...` (fragment, not query string)
-- Same Pi co-location: HomeBot reads `OPENCLAW_STATE_DIR` directly (default `~/.openclaw`)
+- Do **not** run `chromium` or `chromium-browser` directly — use `deploy/kiosk.sh` or systemd only
+- Only **one** kiosk instance: `kiosk.sh restart` stops existing Chromium before starting
 
 ## Report back to user
 
@@ -36,4 +37,5 @@ After install, tell the user:
 - Dashboard URL (with token fragment if configured)
 - `systemctl --user status homebot-server` result
 - Whether today's plan file exists and how many items were parsed
-- How to start/stop kiosk: `systemctl --user start|stop homebot-kiosk`
+- How to start/stop kiosk: `~/homebot/deploy/kiosk.sh restart` or `systemctl --user restart homebot-kiosk`
+- Confirm `kiosk.sh status` shows exactly one Chromium process

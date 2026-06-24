@@ -119,8 +119,20 @@ fi
 
 ### 4. Start the touch kiosk
 
+**Use only one of these** (do not run `chromium` manually — that opens duplicate windows):
+
 ```bash
-systemctl --user start homebot-kiosk
+# Preferred: systemd (single instance, fullscreen)
+systemctl --user restart homebot-kiosk
+
+# Or helper script (stops any existing instance first)
+~/homebot/deploy/kiosk.sh restart
+```
+
+Check only one Chromium is running:
+
+```bash
+~/homebot/deploy/kiosk.sh status
 ```
 
 Chromium opens in **true kiosk fullscreen** (`--kiosk`). Use the **✕ CLOSE** button (top-left) to exit back to the desktop.
@@ -203,6 +215,7 @@ Config file: `~/homebot/deploy/env`
 | Gateway offline in UI | `systemctl --user restart openclaw-gateway`; check token in kiosk URL `#token=...` |
 | Kiosk won't start | Ensure graphical session: `echo $DISPLAY`, start from desktop or set `DISPLAY=:0` |
 | `pnpm install` fails on Pi | Run `npm install -g pnpm` then retry; Node 22+ required |
+| Multiple Chromium windows/tabs | Never launch `chromium` manually; use `kiosk.sh restart` or `systemctl --user restart homebot-kiosk` only |
 | Close button doesn't exit | Re-run install so `deploy/launch-kiosk.sh` is used; Close calls `pkill` on kiosk Chromium |
 | Permission denied on `~/.openclaw` | Run HomeBot as the same user that runs OpenClaw |
 
