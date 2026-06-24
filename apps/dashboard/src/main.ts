@@ -2,6 +2,7 @@ import type { ApprovalRequest, DashboardData, GatewayCronEvent, PlanItem } from 
 import { exitApp, togglePlanItem } from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
+import { ensureFullscreen } from "./fullscreen";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
 import "./styles/nexus.css";
 
@@ -222,13 +223,7 @@ function render(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  try {
-    if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen().catch(() => {});
-    }
-  } catch {
-    /* optional */
-  }
+  ensureFullscreen();
 
   setupGateway();
   setupClock();

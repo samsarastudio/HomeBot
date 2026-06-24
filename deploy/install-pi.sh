@@ -60,23 +60,21 @@ fi
   echo "DISPLAY=:0"
   if [[ -n "$TOKEN" ]]; then
     echo "GATEWAY_TOKEN=$TOKEN"
+    echo "KIOSK_URL=http://127.0.0.1:8080/#token=$TOKEN"
   else
     echo "# GATEWAY_TOKEN=set-manually"
+    echo "KIOSK_URL=http://127.0.0.1:8080/"
   fi
 } > "$ENV_FILE"
+
+chmod +x "$HOMEBOT_DIR/deploy/launch-kiosk.sh"
 
 # systemd user units
 mkdir -p "$HOME/.config/systemd/user"
 
 sed "s|%h/homebot|$HOMEBOT_DIR|g" deploy/homebot-server.service > "$HOME/.config/systemd/user/homebot-server.service"
 
-KIOSK_URL="http://127.0.0.1:8080/"
-if [[ -n "$TOKEN" ]]; then
-  KIOSK_URL="http://127.0.0.1:8080/#token=$TOKEN"
-fi
-
 sed "s|%h/homebot|$HOMEBOT_DIR|g" deploy/homebot-kiosk.service \
-  | sed "s|__KIOSK_URL__|$KIOSK_URL|g" \
   > "$HOME/.config/systemd/user/homebot-kiosk.service"
 
 systemctl --user daemon-reload
@@ -86,7 +84,11 @@ systemctl --user restart homebot-server.service
 echo ""
 echo "Installed. Server: systemctl --user status homebot-server"
 echo "Start kiosk:      systemctl --user start homebot-kiosk"
-echo "Open in browser:  $KIOSK_URL"
+if [[ -n "${TOKEN:-}" ]]; then
+  echo "Kiosk URL:        http://127.0.0.1:8080/#token=<set in deploy/env>"
+else
+  echo "Kiosk URL:        http://127.0.0.1:8080/"
+fi
 echo ""
 echo "Copy skills/daily-plan to your OpenClaw workspace if desired:"
 echo "  cp -r $HOMEBOT_DIR/skills/daily-plan $STATE_DIR/workspace/skills/"

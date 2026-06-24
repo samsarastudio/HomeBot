@@ -133,15 +133,17 @@ export function createApp(): express.Express {
   app.post("/api/exit", (_req, res) => {
     res.json({ ok: true });
     const port = PORT;
-    const patterns = [
-      `chromium.*127.0.0.1:${port}`,
-      `chromium.*localhost:${port}`,
-      `chrome.*127.0.0.1:${port}`,
-    ];
+
     setTimeout(() => {
       if (process.platform === "win32") {
         exec(`taskkill /F /FI "WINDOWTITLE eq HomeBot*"`, () => {});
       } else {
+        const patterns = [
+          `chromium.*--kiosk.*127.0.0.1:${port}`,
+          `chromium.*127.0.0.1:${port}`,
+          `chromium.*localhost:${port}`,
+          `chrome.*127.0.0.1:${port}`,
+        ];
         for (const p of patterns) {
           exec(`pkill -f "${p}"`, () => {});
         }

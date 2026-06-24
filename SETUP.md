@@ -123,7 +123,7 @@ fi
 systemctl --user start homebot-kiosk
 ```
 
-Chromium opens fullscreen in app mode. Use the **✕ CLOSE** button (top-left) to return to the desktop.
+Chromium opens in **true kiosk fullscreen** (`--kiosk`). Use the **✕ CLOSE** button (top-left) to exit back to the desktop.
 
 ### 5. Enable kiosk on boot (optional)
 
@@ -203,7 +203,7 @@ Config file: `~/homebot/deploy/env`
 | Gateway offline in UI | `systemctl --user restart openclaw-gateway`; check token in kiosk URL `#token=...` |
 | Kiosk won't start | Ensure graphical session: `echo $DISPLAY`, start from desktop or set `DISPLAY=:0` |
 | `pnpm install` fails on Pi | Run `npm install -g pnpm` then retry; Node 22+ required |
-| Close button doesn't exit | Kiosk must use Chromium `--app=` mode (install script configures this) |
+| Close button doesn't exit | Re-run install so `deploy/launch-kiosk.sh` is used; Close calls `pkill` on kiosk Chromium |
 | Permission denied on `~/.openclaw` | Run HomeBot as the same user that runs OpenClaw |
 
 ---

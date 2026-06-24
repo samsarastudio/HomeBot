@@ -1,5 +1,5 @@
 [Unit]
-Description=HomeBot Chromium Touch Dashboard
+Description=HomeBot Chromium Touch Dashboard (fullscreen kiosk)
 After=homebot-server.service graphical-session.target
 Requires=homebot-server.service
 
@@ -7,7 +7,7 @@ Requires=homebot-server.service
 Type=simple
 EnvironmentFile=%h/homebot/deploy/env
 Environment=DISPLAY=:0
-ExecStart=/usr/bin/chromium-browser --app=__KIOSK_URL__ --noerrdialogs --disable-session-crashed-bubble --window-name=HomeBot
+ExecStart=%h/homebot/deploy/launch-kiosk.sh
 Restart=on-failure
 RestartSec=10
 

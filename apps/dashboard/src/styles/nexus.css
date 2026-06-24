@@ -24,11 +24,18 @@
 
 html,
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg-deep);
   color: var(--text-primary);
   font-family: "Rajdhani", system-ui, sans-serif;
+  touch-action: manipulation;
 }
 
 body {
@@ -39,11 +46,16 @@ body {
 }
 
 #app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: calc(12px + var(--safe-top)) calc(12px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left));
   gap: 12px;
+  overflow: hidden;
 }
 
 .top-bar {
