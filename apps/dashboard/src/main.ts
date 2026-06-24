@@ -512,7 +512,7 @@ function renderMain(): void {
   pendingPanel.appendChild(pendingBody);
   grid.appendChild(pendingPanel);
 
-  const donePanel = el("section", "panel");
+  const donePanel = el("section", "panel panel-done");
   donePanel.appendChild(el("div", "panel-header", "DONE TODAY"));
   const doneBody = el("div", "panel-body scroll-themed");
   doneBody.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true));
