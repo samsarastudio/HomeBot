@@ -6,6 +6,7 @@ import { ensureFullscreen } from "./fullscreen";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
 import { formatAgeMinutes, isItemOverdue, sortPlanItems } from "./plan-utils";
 import { createTouchCalendarPicker, createTouchClockPicker } from "./touch-pickers";
+import { enableTouchScroll } from "./touch-scroll";
 import "./styles/nexus.css";
 
 interface CronPrompt {
@@ -31,6 +32,8 @@ let lastPlanKey = "";
 let mainShellBuilt = false;
 let pendingBodyEl: HTMLElement | null = null;
 let doneBodyEl: HTMLElement | null = null;
+let pendingHeaderEl: HTMLElement | null = null;
+let doneHeaderEl: HTMLElement | null = null;
 let gatewayChipEl: HTMLElement | null = null;
 let countChipEl: HTMLElement | null = null;
 const addedAtCache = new Map<string, string>();
@@ -126,18 +129,7 @@ function restorePanelScroll(tops: Record<string, number>): void {
 }
 
 function attachPanelScrollGuard(panel: HTMLElement): void {
-  let timer = 0;
-  panel.addEventListener(
-    "scroll",
-    () => {
-      panel.dataset.scrolling = "1";
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        delete panel.dataset.scrolling;
-      }, 250);
-    },
-    { passive: true },
-  );
+  enableTouchScroll(panel);
 }
 
 function imageBase(filename: string): string {
@@ -171,46 +163,6 @@ function openDetail(item: PlanItem): void {
   renderOverlay(true);
 }
 
-function bindTapOpen(target: HTMLElement, item: PlanItem, scrollParent: HTMLElement): void {
-  let startY = 0;
-  let startX = 0;
-  let moved = false;
-
-  target.addEventListener(
-    "touchstart",
-    (e) => {
-      startY = e.touches[0]!.clientY;
-      startX = e.touches[0]!.clientX;
-      moved = false;
-    },
-    { passive: true },
-  );
-
-  target.addEventListener(
-    "touchmove",
-    (e) => {
-      const dy = Math.abs(e.touches[0]!.clientY - startY);
-      const dx = Math.abs(e.touches[0]!.clientX - startX);
-      if (dy > 10 || dx > 10) moved = true;
-    },
-    { passive: true },
-  );
-
-  target.addEventListener("touchend", (e) => {
-    if (moved || scrollParent.dataset.scrolling === "1") return;
-    const dy = Math.abs(e.changedTouches[0]!.clientY - startY);
-    const dx = Math.abs(e.changedTouches[0]!.clientX - startX);
-    if (dy > 12 || dx > 12) return;
-    openDetail(item);
-  });
-
-  target.addEventListener("click", (e) => {
-    if (e.detail === 0) return;
-    if (scrollParent.dataset.scrolling === "1") return;
-    openDetail(item);
-  });
-}
-
 function thumbForItem(item: PlanItem): HTMLElement {
   const wrap = el("div", "plan-thumb");
   const src = thumbSrc(item);
@@ -235,8 +187,8 @@ function thumbForItem(item: PlanItem): HTMLElement {
   return wrap;
 }
 
-function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLElement): HTMLElement {
-  const container = el("div");
+function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
+  const container = el("div", "plan-list");
   const filtered = filterItems(items);
 
   if (filtered.length === 0) {
@@ -272,8 +224,6 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
     });
 
     const body = el("div", "plan-body");
-    body.setAttribute("role", "button");
-    body.tabIndex = 0;
 
     if (itemHasImage(item) || item.attachment) {
       body.appendChild(thumbForItem(item));
@@ -282,28 +232,37 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
     const textWrap = el("div", "plan-text");
     const meta = el("div", "plan-meta-row");
 
-    if (item.time) meta.appendChild(el("span", `plan-time${overdue ? " overdue-text" : ""}`, item.time));
-    if (item.dueDate) {
+    if (item.time) meta.appendChild(el("span", `plan-time${overdue && !done ? " overdue-text" : ""}`, item.time));
+    if (!done && item.dueDate) {
       const d = item.dueDate.slice(5).replace("-", "/");
       meta.appendChild(el("span", `plan-date${overdue ? " overdue-text" : ""}`, d));
     }
-    if (item.important) meta.appendChild(el("span", "plan-badge important", "★"));
-    if (item.category === "work") meta.appendChild(el("span", "plan-badge work", "WORK"));
-    const addedAt = getItemAddedAt(item);
-    const age = el("span", "plan-age");
-    age.dataset.addedAt = addedAt;
-    age.textContent = formatAgeMinutes(addedAt);
-    meta.appendChild(age);
+    if (!done && item.important) meta.appendChild(el("span", "plan-badge important", "★"));
+    if (!done && item.category === "work") meta.appendChild(el("span", "plan-badge work", "WORK"));
+    if (!done) {
+      const addedAt = getItemAddedAt(item);
+      const age = el("span", "plan-age");
+      age.dataset.addedAt = addedAt;
+      age.textContent = formatAgeMinutes(addedAt);
+      meta.appendChild(age);
+    }
     if (meta.childElementCount > 0) textWrap.appendChild(meta);
 
-    textWrap.appendChild(el("div", `plan-title${overdue ? " overdue-text" : ""}`, item.title));
-    if (item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
+    textWrap.appendChild(el("div", `plan-title${overdue && !done ? " overdue-text" : ""}`, item.title));
+    if (!done && item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
     body.appendChild(textWrap);
 
-    bindTapOpen(body, item, scrollParent);
+    const editBtn = el("button", "plan-edit-btn", "›");
+    editBtn.type = "button";
+    editBtn.setAttribute("aria-label", "Edit task");
+    editBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openDetail(item);
+    });
 
     row.appendChild(check);
     row.appendChild(body);
+    row.appendChild(editBtn);
     container.appendChild(row);
   }
 
@@ -582,6 +541,13 @@ function updateInfoStrip(): void {
   }
 }
 
+function updatePanelHeaders(): void {
+  const pendingCount = filterItems(dashboard?.todolist.plan.pending ?? []).length;
+  const doneCount = filterItems(dashboard?.todolist.plan.done ?? []).length;
+  if (pendingHeaderEl) pendingHeaderEl.textContent = `TODAY'S PLAN (${pendingCount})`;
+  if (doneHeaderEl) doneHeaderEl.textContent = `DONE TODAY (${doneCount})`;
+}
+
 function updatePlanPanels(): void {
   const key = planDataKey();
   if (key === lastPlanKey) {
@@ -594,14 +560,15 @@ function updatePlanPanels(): void {
 
   if (pendingBodyEl) {
     pendingBodyEl.replaceChildren();
-    pendingBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.pending ?? [], false, pendingBodyEl));
+    pendingBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.pending ?? [], false));
   }
   if (doneBodyEl) {
     doneBodyEl.replaceChildren();
-    doneBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true, doneBodyEl));
+    doneBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true));
   }
 
   restorePanelScroll(scrollTops);
+  updatePanelHeaders();
   updateAgeLabels();
   updateInfoStrip();
 }
@@ -663,7 +630,8 @@ function buildMainShell(): void {
   const grid = el("main", "main-grid");
 
   const pendingPanel = el("section", "panel");
-  pendingPanel.appendChild(el("div", "panel-header", "TODAY'S PLAN"));
+  pendingHeaderEl = el("div", "panel-header", "TODAY'S PLAN");
+  pendingPanel.appendChild(pendingHeaderEl);
   pendingBodyEl = el("div", "panel-body scroll-themed");
   pendingBodyEl.dataset.scrollId = "pending";
   attachPanelScrollGuard(pendingBodyEl);
@@ -671,7 +639,8 @@ function buildMainShell(): void {
   grid.appendChild(pendingPanel);
 
   const donePanel = el("section", "panel panel-done");
-  donePanel.appendChild(el("div", "panel-header", "DONE TODAY"));
+  doneHeaderEl = el("div", "panel-header", "DONE TODAY");
+  donePanel.appendChild(doneHeaderEl);
   doneBodyEl = el("div", "panel-body scroll-themed");
   doneBodyEl.dataset.scrollId = "done";
   attachPanelScrollGuard(doneBodyEl);
