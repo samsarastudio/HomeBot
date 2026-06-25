@@ -33,6 +33,14 @@ memory/YYYY-MM-DD.md
 - **Image**: `{img:file.jpg}` in `uploads/images/`
 - **Attachment**: `{attach:file.pdf}`
 
+### Carry forward
+
+- Unchecked items from prior days are **automatically copied** into today's plan on load.
+- `{from:YYYY-MM-DD}` marks the original day (added automatically when carried).
+- **Orange band** — carried from yesterday (1 day).
+- **Red band** — carried 2+ days without completion.
+- Source lines get `{carried:YYYY-MM-DD}` so they are not duplicated.
+
 ### Sorting on the dashboard
 
 1. Items with a **time** or **due date** appear first (earliest schedule on top)

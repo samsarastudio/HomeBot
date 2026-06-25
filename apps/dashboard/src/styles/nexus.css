@@ -461,6 +461,28 @@ body {
   border-color: rgba(251, 191, 36, 0.25);
 }
 
+.plan-item.carry-orange .plan-body {
+  box-shadow: inset 0 4px 0 #f97316;
+  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+.plan-item.carry-red .plan-body {
+  box-shadow: inset 0 4px 0 var(--danger);
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.plan-badge.carry {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.15);
+}
+
+.plan-badge.carry.carry-late {
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.15);
+}
+
 .plan-text {
   flex: 1;
   min-width: 0;

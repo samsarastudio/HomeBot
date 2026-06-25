@@ -108,6 +108,7 @@ function planDataKey(): string {
       category: i.category,
       important: i.important,
       addedAt: i.addedAt,
+      carryFrom: i.carryFrom,
     }));
   return JSON.stringify({
     filter: planFilter,
@@ -249,9 +250,15 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
 
   for (const item of filtered) {
     const overdue = isItemOverdue(item, ymd);
+    const carryClass =
+      !done && item.carryBand === "red"
+        ? " carry-red"
+        : !done && item.carryBand === "orange"
+          ? " carry-orange"
+          : "";
     const row = el(
       "div",
-      `plan-item${done ? " done-item" : ""}${overdue ? " overdue" : ""}${item.important ? " important" : ""}`,
+      `plan-item${done ? " done-item" : ""}${overdue ? " overdue" : ""}${carryClass}${item.important ? " important" : ""}`,
     );
 
     const check = el("button", `plan-check${done ? " is-done" : ""}`, done ? "✓" : "");
@@ -282,6 +289,13 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
     }
     if (!done && item.important) meta.appendChild(el("span", "plan-badge important", "★"));
     if (!done && item.category === "work") meta.appendChild(el("span", "plan-badge work", "WORK"));
+    if (!done && item.carryFrom) {
+      const label =
+        item.carriedDays === 1
+          ? "YESTERDAY"
+          : `FROM ${item.carryFrom.slice(5).replace("-", "/")}`;
+      meta.appendChild(el("span", `plan-badge carry${item.carryBand === "red" ? " carry-late" : ""}`, label));
+    }
     if (!done) {
       const addedAt = getItemAddedAt(item);
       const age = el("span", "plan-age");

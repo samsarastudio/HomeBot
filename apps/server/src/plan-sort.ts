@@ -61,8 +61,25 @@ export function isItemOverdue(item: PlanItem, todayYmd: string, now = new Date()
 }
 
 export function enrichPlanItemMeta(item: PlanItem, todayYmd: string): PlanItem {
-  return {
+  const enriched: PlanItem = {
     ...item,
     overdue: isItemOverdue(item, todayYmd),
   };
+
+  if (!item.done && item.carryFrom) {
+    const days = daysBetweenYmd(item.carryFrom, todayYmd);
+    enriched.carriedDays = days;
+    if (days >= 2) enriched.carryBand = "red";
+    else if (days >= 1) enriched.carryBand = "orange";
+  }
+
+  return enriched;
+}
+
+function daysBetweenYmd(fromYmd: string, toYmd: string): number {
+  const [fy, fm, fd] = fromYmd.split("-").map(Number);
+  const [ty, tm, td] = toYmd.split("-").map(Number);
+  const from = Date.UTC(fy!, fm! - 1, fd!);
+  const to = Date.UTC(ty!, tm! - 1, td!);
+  return Math.round((to - from) / 86_400_000);
 }

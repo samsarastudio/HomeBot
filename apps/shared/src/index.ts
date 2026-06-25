@@ -11,6 +11,9 @@ export interface PlanItem {
   important?: boolean;
   dueDate?: string;
   addedAt?: string;
+  carryFrom?: string;
+  carriedDays?: number;
+  carryBand?: "orange" | "red";
   overdue?: boolean;
   image?: string;
   attachment?: string;
