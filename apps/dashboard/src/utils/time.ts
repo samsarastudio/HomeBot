@@ -1,8 +1,9 @@
 export function getGreeting(date = new Date()): string {
   const hour = date.getHours();
-  if (hour < 12) return "GOOD MORNING";
-  if (hour < 17) return "GOOD AFTERNOON";
-  return "GOOD EVENING";
+  if (hour >= 5 && hour < 12) return "GOOD MORNING";
+  if (hour >= 12 && hour < 17) return "GOOD AFTERNOON";
+  if (hour >= 2 && hour < 5) return "GOOD NIGHT";
+  return "GOOD EVENING"; // 5 PM – 1:59 AM (covers midnight while working late)
 }
 
 export function formatClock(date = new Date()): string {

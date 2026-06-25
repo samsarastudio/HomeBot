@@ -691,8 +691,12 @@ function buildMainShell(): void {
   topBar.appendChild(closeBtn);
 
   const center = el("div", "header-center");
-  center.appendChild(el("div", "greeting", getGreeting()));
-  center.appendChild(el("div", "date-line", formatDate()));
+  const greeting = el("div", "greeting", getGreeting());
+  greeting.id = "greeting";
+  center.appendChild(greeting);
+  const dateLine = el("div", "date-line", formatDate());
+  dateLine.id = "date-line";
+  center.appendChild(dateLine);
   topBar.appendChild(center);
 
   const clock = el("div", "clock", formatClock());
@@ -728,7 +732,10 @@ function buildMainShell(): void {
 }
 
 function renderMain(): void {
-  if (!mainShellBuilt) buildMainShell();
+  if (!mainShellBuilt) {
+    buildMainShell();
+    refreshHeaderTime();
+  }
   updatePlanPanels();
 }
 
@@ -788,10 +795,22 @@ function setupGateway(): void {
   gateway.connect();
 }
 
+function refreshHeaderTime(now = new Date()): void {
+  const clock = document.getElementById("clock");
+  if (clock) clock.textContent = formatClock(now);
+
+  const greeting = document.getElementById("greeting");
+  if (greeting) greeting.textContent = getGreeting(now);
+
+  const dateLine = document.getElementById("date-line");
+  if (dateLine) dateLine.textContent = formatDate(now);
+}
+
 function setupClock(): void {
+  refreshHeaderTime();
+
   setInterval(() => {
-    const clock = document.getElementById("clock");
-    if (clock) clock.textContent = formatClock();
+    refreshHeaderTime();
   }, 1000);
 
   setInterval(() => {
