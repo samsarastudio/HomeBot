@@ -6,7 +6,6 @@ import { ensureFullscreen } from "./fullscreen";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
 import { formatAgeMinutes, isItemOverdue, sortPlanItems } from "./plan-utils";
 import { createTouchCalendarPicker, createTouchClockPicker } from "./touch-pickers";
-import { enableTouchScroll } from "./touch-scroll";
 import "./styles/nexus.css";
 
 interface CronPrompt {
@@ -35,7 +34,12 @@ let doneBodyEl: HTMLElement | null = null;
 let pendingHeaderEl: HTMLElement | null = null;
 let doneHeaderEl: HTMLElement | null = null;
 let gatewayChipEl: HTMLElement | null = null;
+let cronChipEl: HTMLElement | null = null;
+let runChipEl: HTMLElement | null = null;
 let countChipEl: HTMLElement | null = null;
+let cpuChipEl: HTMLElement | null = null;
+let ramChipEl: HTMLElement | null = null;
+let diskChipEl: HTMLElement | null = null;
 const addedAtCache = new Map<string, string>();
 
 const app = document.getElementById("app")!;
@@ -129,7 +133,46 @@ function restorePanelScroll(tops: Record<string, number>): void {
 }
 
 function attachPanelScrollGuard(panel: HTMLElement): void {
-  enableTouchScroll(panel);
+  let timer = 0;
+  panel.addEventListener(
+    "scroll",
+    () => {
+      panel.dataset.scrolling = "1";
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        delete panel.dataset.scrolling;
+      }, 200);
+    },
+    { passive: true },
+  );
+}
+
+function bindTapOpen(target: HTMLElement, item: PlanItem, scrollParent: HTMLElement): void {
+  let startY = 0;
+  let startX = 0;
+
+  target.addEventListener(
+    "touchstart",
+    (e) => {
+      startY = e.touches[0]!.clientY;
+      startX = e.touches[0]!.clientX;
+    },
+    { passive: true },
+  );
+
+  target.addEventListener("touchend", (e) => {
+    if (scrollParent.dataset.scrolling === "1") return;
+    const dy = Math.abs(e.changedTouches[0]!.clientY - startY);
+    const dx = Math.abs(e.changedTouches[0]!.clientX - startX);
+    if (dy > 15 || dx > 15) return;
+    openDetail(item);
+  });
+
+  target.addEventListener("click", (e) => {
+    if (e.detail === 0) return;
+    if (scrollParent.dataset.scrolling === "1") return;
+    openDetail(item);
+  });
 }
 
 function imageBase(filename: string): string {
@@ -187,7 +230,7 @@ function thumbForItem(item: PlanItem): HTMLElement {
   return wrap;
 }
 
-function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
+function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLElement): HTMLElement {
   const container = el("div", "plan-list");
   const filtered = filterItems(items);
 
@@ -252,17 +295,10 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
     if (!done && item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
     body.appendChild(textWrap);
 
-    const editBtn = el("button", "plan-edit-btn", "›");
-    editBtn.type = "button";
-    editBtn.setAttribute("aria-label", "Edit task");
-    editBtn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      openDetail(item);
-    });
+    bindTapOpen(body, item, scrollParent);
 
     row.appendChild(check);
     row.appendChild(body);
-    row.appendChild(editBtn);
     container.appendChild(row);
   }
 
@@ -307,7 +343,7 @@ function renderDetailOverlay(): HTMLElement | null {
   header.appendChild(close);
   card.appendChild(header);
 
-  const body = el("div", "detail-card-body scroll-themed");
+  const body = el("div", "detail-card-body");
   body.appendChild(el("div", "detail-title", detailItem.title));
   if (detailItem.description) body.appendChild(el("div", "detail-desc", detailItem.description));
 
@@ -533,11 +569,22 @@ function updateAgeLabels(): void {
 function updateInfoStrip(): void {
   const done = dashboard?.todolist.completed ?? 0;
   const pending = dashboard?.todolist.pending ?? 0;
-  if (countChipEl) countChipEl.textContent = `${done}/${done + pending}`;
+  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
+
   if (gatewayChipEl) {
     gatewayChipEl.className = `info-chip ${gatewayOnline ? "online" : "offline"}`;
     const label = gatewayChipEl.lastChild;
     if (label) label.textContent = gatewayOnline ? "ONLINE" : "OFFLINE";
+  }
+  if (cronChipEl) cronChipEl.textContent = `CRON ${cronCount}`;
+  if (runChipEl) runChipEl.textContent = `RUN ${dashboard?.tasks.running ?? 0}`;
+  if (countChipEl) countChipEl.textContent = `${done}/${done + pending}`;
+
+  const sys = dashboard?.system;
+  if (sys) {
+    if (cpuChipEl) cpuChipEl.textContent = `CPU ${sys.cpu}`;
+    if (ramChipEl) ramChipEl.textContent = `RAM ${sys.ram}`;
+    if (diskChipEl) diskChipEl.textContent = `DISK ${sys.disk}`;
   }
 }
 
@@ -560,11 +607,11 @@ function updatePlanPanels(): void {
 
   if (pendingBodyEl) {
     pendingBodyEl.replaceChildren();
-    pendingBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.pending ?? [], false));
+    pendingBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.pending ?? [], false, pendingBodyEl));
   }
   if (doneBodyEl) {
     doneBodyEl.replaceChildren();
-    doneBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true));
+    doneBodyEl.appendChild(renderPlanItems(dashboard?.todolist.plan.done ?? [], true, doneBodyEl));
   }
 
   restorePanelScroll(scrollTops);
@@ -591,16 +638,31 @@ function renderFilterBar(): HTMLElement {
 }
 
 function renderInfoStrip(): HTMLElement {
-  const strip = el("div", "info-strip scroll-themed");
+  const strip = el("div", "info-strip");
   gatewayChipEl = el("span", `info-chip ${gatewayOnline ? "online" : "offline"}`);
   gatewayChipEl.appendChild(el("span", "dot"));
   gatewayChipEl.appendChild(document.createTextNode(gatewayOnline ? "ONLINE" : "OFFLINE"));
   strip.appendChild(gatewayChipEl);
 
+  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
+  cronChipEl = el("span", "info-chip", `CRON ${cronCount}`);
+  strip.appendChild(cronChipEl);
+
+  runChipEl = el("span", "info-chip", `RUN ${dashboard?.tasks.running ?? 0}`);
+  strip.appendChild(runChipEl);
+
   const done = dashboard?.todolist.completed ?? 0;
   const pending = dashboard?.todolist.pending ?? 0;
   countChipEl = el("span", "info-chip", `${done}/${done + pending}`);
   strip.appendChild(countChipEl);
+
+  const sys = dashboard?.system;
+  if (sys) {
+    cpuChipEl = el("span", "info-chip", `CPU ${sys.cpu}`);
+    ramChipEl = el("span", "info-chip", `RAM ${sys.ram}`);
+    diskChipEl = el("span", "info-chip", `DISK ${sys.disk}`);
+    strip.append(cpuChipEl, ramChipEl, diskChipEl);
+  }
 
   return strip;
 }
@@ -632,7 +694,7 @@ function buildMainShell(): void {
   const pendingPanel = el("section", "panel");
   pendingHeaderEl = el("div", "panel-header", "TODAY'S PLAN");
   pendingPanel.appendChild(pendingHeaderEl);
-  pendingBodyEl = el("div", "panel-body scroll-themed");
+  pendingBodyEl = el("div", "panel-body");
   pendingBodyEl.dataset.scrollId = "pending";
   attachPanelScrollGuard(pendingBodyEl);
   pendingPanel.appendChild(pendingBodyEl);
@@ -641,7 +703,7 @@ function buildMainShell(): void {
   const donePanel = el("section", "panel panel-done");
   doneHeaderEl = el("div", "panel-header", "DONE TODAY");
   donePanel.appendChild(doneHeaderEl);
-  doneBodyEl = el("div", "panel-body scroll-themed");
+  doneBodyEl = el("div", "panel-body");
   doneBodyEl.dataset.scrollId = "done";
   attachPanelScrollGuard(doneBodyEl);
   donePanel.appendChild(doneBodyEl);
@@ -657,7 +719,6 @@ function renderMain(): void {
 }
 
 function applyDashboardData(data: DashboardData): void {
-  const gwChanged = gatewayOnline !== data.gateway.online;
   dashboard = data;
   gatewayOnline = data.gateway.online;
 
@@ -671,7 +732,7 @@ function applyDashboardData(data: DashboardData): void {
   }
 
   renderMain();
-  if (gwChanged) updateInfoStrip();
+  updateInfoStrip();
   if (detailItem) return;
   renderOverlay();
 }

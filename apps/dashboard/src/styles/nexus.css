@@ -160,16 +160,14 @@ body {
 .info-strip {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
-  max-height: 36px;
   padding: 6px 10px;
   border: 1px solid rgba(138, 92, 255, 0.2);
   border-radius: 10px;
   background: rgba(12, 10, 28, 0.6);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   flex-shrink: 0;
-  -webkit-overflow-scrolling: touch;
 }
 
 .info-chip {
@@ -199,27 +197,6 @@ body {
 
 .info-chip.offline .dot {
   background: var(--danger);
-}
-
-.scroll-themed {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(168, 85, 247, 0.4) transparent;
-  -webkit-overflow-scrolling: touch;
-}
-
-.scroll-themed::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.scroll-themed::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 3px;
-}
-
-.scroll-themed::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.4);
-  border-radius: 3px;
 }
 
 .status-bar {
@@ -295,7 +272,7 @@ body {
 }
 
 .plan-list {
-  touch-action: pan-y;
+  min-height: min-content;
 }
 
 .panel-body {
@@ -304,25 +281,25 @@ body {
   overflow-y: scroll;
   overflow-x: hidden;
   padding: 8px;
-  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(168, 85, 247, 0.4) transparent;
+  scrollbar-width: auto;
+  scrollbar-color: rgba(168, 85, 247, 0.7) rgba(255, 255, 255, 0.08);
 }
 
 .panel-body::-webkit-scrollbar {
-  width: 6px;
+  width: 14px;
 }
 
 .panel-body::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
 }
 
 .panel-body::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.4);
-  border-radius: 3px;
+  background: rgba(168, 85, 247, 0.7);
+  border-radius: 7px;
+  border: 2px solid rgba(8, 8, 20, 0.9);
 }
 
 .plan-item {
@@ -371,32 +348,14 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
   text-align: left;
   color: inherit;
   font: inherit;
-  touch-action: pan-y;
 }
 
-.plan-edit-btn {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  align-self: center;
-  flex-shrink: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(138, 92, 255, 0.35);
-  background: rgba(168, 85, 247, 0.1);
-  color: var(--accent-purple);
-  font-size: 1.35rem;
-  line-height: 1;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  touch-action: manipulation;
-}
-
-.plan-edit-btn:active {
-  background: rgba(168, 85, 247, 0.25);
+.plan-body:active {
+  background: rgba(168, 85, 247, 0.12);
 }
 
 .plan-check {
@@ -600,14 +559,6 @@ body {
   min-width: 0;
 }
 
-.panel-done .plan-edit-btn {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  font-size: 1rem;
-  border-radius: 8px;
-}
-
 .panel-done .plan-title {
   font-size: 0.8rem;
   font-weight: 600;
@@ -756,10 +707,13 @@ body {
 
 .detail-card-body {
   flex: 1;
-  overflow-y: scroll;
+  overflow-y: auto;
   padding: 20px;
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.detail-card-body::-webkit-scrollbar {
+  display: none;
 }
 
 .detail-time-row {
