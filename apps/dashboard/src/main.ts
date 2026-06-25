@@ -1,9 +1,11 @@
-import type { CalendarNotification, DashboardData, PlanItem } from "@homebot/shared";
-import { dismissNotification, exitApp, togglePlanItem, updatePlanItemTime } from "./api";
+import type { CalendarNotification, DashboardData, PlanCategory, PlanItem } from "@homebot/shared";
+import { dismissNotification, exitApp, togglePlanItem, updatePlanItem } from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
 import { ensureFullscreen } from "./fullscreen";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
+import { isItemOverdue, sortPlanItems } from "./plan-utils";
+import { createTouchCalendarPicker, createTouchClockPicker } from "./touch-pickers";
 import "./styles/nexus.css";
 
 interface CronPrompt {
@@ -15,12 +17,15 @@ interface CronPrompt {
   dismissed?: boolean;
 }
 
+type PlanFilter = "all" | PlanCategory;
+
 let dashboard: DashboardData | null = null;
 let gatewayOnline = false;
 let cronPrompts: CronPrompt[] = [];
 let approval: import("@homebot/shared").ApprovalRequest | null = null;
 let detailItem: PlanItem | null = null;
 let activeNotification: CalendarNotification | null = null;
+let planFilter: PlanFilter = "all";
 let lastOverlayKey = "";
 
 const app = document.getElementById("app")!;
@@ -37,6 +42,16 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function todayYmd(): string {
+  return dashboard?.todolist.plan.date ?? new Date().toISOString().slice(0, 10);
+}
+
+function filterItems(items: PlanItem[]): PlanItem[] {
+  const sorted = sortPlanItems(items);
+  if (planFilter === "all") return sorted;
+  return sorted.filter((i) => (i.category ?? "personal") === planFilter);
 }
 
 function imageBase(filename: string): string {
@@ -70,11 +85,11 @@ function openDetail(item: PlanItem): void {
   renderOverlay(true);
 }
 
-function bindTapOpen(el: HTMLElement, item: PlanItem): void {
+function bindTapOpen(target: HTMLElement, item: PlanItem): void {
   let startY = 0;
   let startX = 0;
 
-  el.addEventListener(
+  target.addEventListener(
     "touchstart",
     (e) => {
       startY = e.touches[0]!.clientY;
@@ -83,14 +98,14 @@ function bindTapOpen(el: HTMLElement, item: PlanItem): void {
     { passive: true },
   );
 
-  el.addEventListener("touchend", (e) => {
+  target.addEventListener("touchend", (e) => {
     const dy = Math.abs(e.changedTouches[0]!.clientY - startY);
     const dx = Math.abs(e.changedTouches[0]!.clientX - startX);
     if (dy > 12 || dx > 12) return;
     openDetail(item);
   });
 
-  el.addEventListener("click", (e) => {
+  target.addEventListener("click", (e) => {
     if (e.detail === 0) return;
     openDetail(item);
   });
@@ -122,18 +137,30 @@ function thumbForItem(item: PlanItem): HTMLElement {
 
 function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
   const container = el("div");
+  const filtered = filterItems(items);
 
-  if (items.length === 0) {
-    container.appendChild(el("div", "empty-state", done ? "Nothing completed yet" : "No plan yet"));
+  if (filtered.length === 0) {
+    const msg =
+      planFilter === "all"
+        ? done
+          ? "Nothing completed yet"
+          : "No plan yet"
+        : `No ${planFilter} items`;
+    container.appendChild(el("div", "empty-state", msg));
     return container;
   }
 
-  for (const item of items) {
-    const row = el("div", `plan-item${done ? " done-item" : ""}`);
+  const ymd = todayYmd();
+
+  for (const item of filtered) {
+    const overdue = isItemOverdue(item, ymd);
+    const row = el(
+      "div",
+      `plan-item${done ? " done-item" : ""}${overdue ? " overdue" : ""}${item.important ? " important" : ""}`,
+    );
 
     const check = el("button", `plan-check${done ? " is-done" : ""}`, done ? "✓" : "");
     check.type = "button";
-    check.title = done ? "Mark pending" : "Mark done";
     check.addEventListener("click", async (ev) => {
       ev.stopPropagation();
       check.classList.add("pulse");
@@ -153,10 +180,18 @@ function renderPlanItems(items: PlanItem[], done: boolean): HTMLElement {
     }
 
     const textWrap = el("div", "plan-text");
-    if (item.time) {
-      textWrap.appendChild(el("div", "plan-time", item.time));
+    const meta = el("div", "plan-meta-row");
+
+    if (item.time) meta.appendChild(el("span", `plan-time${overdue ? " overdue-text" : ""}`, item.time));
+    if (item.dueDate) {
+      const d = item.dueDate.slice(5).replace("-", "/");
+      meta.appendChild(el("span", `plan-date${overdue ? " overdue-text" : ""}`, d));
     }
-    textWrap.appendChild(el("div", "plan-title", item.title));
+    if (item.important) meta.appendChild(el("span", "plan-badge important", "★"));
+    if (item.category === "work") meta.appendChild(el("span", "plan-badge work", "WORK"));
+    if (meta.childElementCount > 0) textWrap.appendChild(meta);
+
+    textWrap.appendChild(el("div", `plan-title${overdue ? " overdue-text" : ""}`, item.title));
     if (item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
     body.appendChild(textWrap);
 
@@ -209,21 +244,49 @@ function renderDetailOverlay(): HTMLElement | null {
   card.appendChild(header);
 
   const body = el("div", "detail-card-body scroll-themed");
-
-  const timeRow = el("div", "detail-time-row");
-  timeRow.appendChild(el("label", "detail-time-label", "TIME"));
-  const timeInput = document.createElement("input");
-  timeInput.type = "text";
-  timeInput.className = "detail-time-input";
-  timeInput.placeholder = "09:00 or 2:30 PM";
-  timeInput.value = detailItem.time ?? "";
-  timeInput.setAttribute("inputmode", "text");
-  timeInput.autocomplete = "off";
-  timeRow.appendChild(timeInput);
-  body.appendChild(timeRow);
-
   body.appendChild(el("div", "detail-title", detailItem.title));
   if (detailItem.description) body.appendChild(el("div", "detail-desc", detailItem.description));
+
+  body.appendChild(el("div", "picker-section-label", "TIME"));
+  const clock = createTouchClockPicker(detailItem.time);
+  body.appendChild(clock.element);
+
+  body.appendChild(el("div", "picker-section-label", "DATE"));
+  const cal = createTouchCalendarPicker(detailItem.dueDate ?? null);
+  body.appendChild(cal.element);
+
+  const tagRow = el("div", "detail-tag-row");
+  let category: PlanCategory = detailItem.category ?? "personal";
+  let important = Boolean(detailItem.important);
+
+  const personalBtn = el("button", "filter-chip", "PERSONAL");
+  const workBtn = el("button", "filter-chip", "WORK");
+  const importantBtn = el("button", "filter-chip", "★ IMPORTANT");
+  personalBtn.type = "button";
+  workBtn.type = "button";
+  importantBtn.type = "button";
+
+  const syncTags = () => {
+    personalBtn.classList.toggle("active", category === "personal");
+    workBtn.classList.toggle("active", category === "work");
+    importantBtn.classList.toggle("active", important);
+  };
+  personalBtn.addEventListener("click", () => {
+    category = "personal";
+    syncTags();
+  });
+  workBtn.addEventListener("click", () => {
+    category = "work";
+    syncTags();
+  });
+  importantBtn.addEventListener("click", () => {
+    important = !important;
+    syncTags();
+  });
+  syncTags();
+  tagRow.append(personalBtn, workBtn, importantBtn);
+  body.appendChild(tagRow);
+
   appendDetailImage(body, detailItem);
 
   if (detailItem.attachmentUrl) {
@@ -234,13 +297,19 @@ function renderDetailOverlay(): HTMLElement | null {
   }
 
   const actions = el("div", "overlay-actions");
-  const saveTime = el("button", "btn btn-dismiss", "SAVE TIME");
-  saveTime.type = "button";
-  saveTime.addEventListener("click", async () => {
-    const time = timeInput.value.trim();
-    if (!time) return;
+  const saveBtn = el("button", "btn btn-dismiss", "SAVE");
+  saveBtn.type = "button";
+  saveBtn.addEventListener("click", async () => {
     try {
-      await updatePlanItemTime(detailItem!.index, time);
+      const timeVal = clock.hasTime() ? clock.getTime() : null;
+      const dateVal = cal.getDate();
+      await updatePlanItem({
+        index: detailItem!.index,
+        time: timeVal,
+        dueDate: dateVal,
+        category,
+        important,
+      });
       detailItem = null;
       renderOverlay(true);
     } catch (err) {
@@ -259,12 +328,10 @@ function renderDetailOverlay(): HTMLElement | null {
       console.error(err);
     }
   });
-  actions.append(saveTime, toggleBtn);
+  actions.append(saveBtn, toggleBtn);
   card.appendChild(body);
   card.appendChild(actions);
   backdrop.appendChild(card);
-
-  requestAnimationFrame(() => timeInput.focus());
 
   return backdrop;
 }
@@ -274,8 +341,7 @@ function renderNotificationOverlay(): HTMLElement | null {
 
   const backdrop = el("div", "overlay-backdrop notification-backdrop");
   const card = el("div", "overlay-card notification-card");
-  const kindLabel = activeNotification.kind === "upcoming" ? "UPCOMING" : "NOW";
-  card.appendChild(el("div", "overlay-title", kindLabel));
+  card.appendChild(el("div", "overlay-title", activeNotification.kind === "upcoming" ? "UPCOMING" : "NOW"));
 
   if (activeNotification.thumbUrl || activeNotification.imageUrl) {
     const img = document.createElement("img");
@@ -287,13 +353,8 @@ function renderNotificationOverlay(): HTMLElement | null {
   }
 
   card.appendChild(el("div", "overlay-body", activeNotification.title));
-  if (activeNotification.notes) {
-    card.appendChild(el("div", "overlay-meta", activeNotification.notes));
-  }
-  const time = new Date(activeNotification.startAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  card.appendChild(el("div", "overlay-meta", `Scheduled ${time}`));
+  if (activeNotification.notes) card.appendChild(el("div", "overlay-meta", activeNotification.notes));
 
-  const actions = el("div", "overlay-actions");
   const dismiss = el("button", "btn btn-dismiss", "DISMISS");
   dismiss.type = "button";
   dismiss.addEventListener("click", async () => {
@@ -302,6 +363,7 @@ function renderNotificationOverlay(): HTMLElement | null {
     await dismissNotification(id).catch(() => {});
     renderOverlay(true);
   });
+  const actions = el("div", "overlay-actions");
   actions.appendChild(dismiss);
   card.appendChild(actions);
   backdrop.appendChild(card);
@@ -315,9 +377,6 @@ function renderApprovalOverlay(): HTMLElement | null {
   const card = el("div", "overlay-card");
   card.appendChild(el("div", "overlay-title", approval.kind === "exec" ? "EXEC APPROVAL" : "PLUGIN APPROVAL"));
   card.appendChild(el("div", "overlay-body", approval.title));
-  if (approval.detail !== approval.title) {
-    card.appendChild(el("div", "overlay-meta", approval.detail));
-  }
 
   const actions = el("div", "overlay-actions");
   const approve = el("button", "btn btn-approve", "APPROVE");
@@ -358,8 +417,6 @@ function renderCronOverlay(): HTMLElement | null {
   const card = el("div", "overlay-card");
   card.appendChild(el("div", "overlay-title", "CRON JOB"));
   card.appendChild(el("div", "overlay-body", activeCron.name ?? activeCron.jobId ?? "Scheduled task"));
-  const meta = [activeCron.status, activeCron.message].filter(Boolean).join(" — ");
-  if (meta) card.appendChild(el("div", "overlay-meta", meta));
 
   const dismiss = el("button", "btn btn-dismiss", "DISMISS");
   dismiss.type = "button";
@@ -377,7 +434,7 @@ function renderCronOverlay(): HTMLElement | null {
 function overlayKey(): string {
   if (approval) return `approval:${approval.requestId}`;
   if (activeNotification) return `notif:${activeNotification.id}`;
-  if (detailItem) return `detail:${detailItem.index}:${detailItem.done}:${detailItem.time}:${detailItem.title}`;
+  if (detailItem) return `detail:${detailItem.index}`;
   const activeCron = cronPrompts.find((p) => !p.dismissed && p.status !== "completed");
   if (activeCron) return `cron:${activeCron.jobId ?? activeCron.id}`;
   return "";
@@ -401,28 +458,30 @@ function renderOverlay(force = false): void {
   if (overlay) overlayRoot.appendChild(overlay);
 }
 
+function renderFilterBar(): HTMLElement {
+  const bar = el("div", "filter-bar");
+  for (const f of ["all", "personal", "work"] as const) {
+    const btn = el("button", `filter-chip${planFilter === f ? " active" : ""}`, f === "all" ? "ALL" : f.toUpperCase());
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      planFilter = f;
+      renderMain();
+    });
+    bar.appendChild(btn);
+  }
+  return bar;
+}
+
 function renderInfoStrip(): HTMLElement {
   const strip = el("div", "info-strip scroll-themed");
   const gw = el("span", `info-chip ${gatewayOnline ? "online" : "offline"}`);
-  gw.id = "gateway-chip";
   gw.appendChild(el("span", "dot"));
   gw.appendChild(document.createTextNode(gatewayOnline ? "ONLINE" : "OFFLINE"));
   strip.appendChild(gw);
 
-  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
-  strip.appendChild(el("span", "info-chip", `CRON ${cronCount}`));
-  strip.appendChild(el("span", "info-chip", `RUN ${dashboard?.tasks.running ?? 0}`));
-
   const done = dashboard?.todolist.completed ?? 0;
   const pending = dashboard?.todolist.pending ?? 0;
   strip.appendChild(el("span", "info-chip", `${done}/${done + pending}`));
-
-  const sys = dashboard?.system;
-  if (sys) {
-    strip.appendChild(el("span", "info-chip", `CPU ${sys.cpu}`));
-    strip.appendChild(el("span", "info-chip", `RAM ${sys.ram}`));
-    strip.appendChild(el("span", "info-chip", `DISK ${sys.disk}`));
-  }
 
   return strip;
 }
@@ -431,11 +490,8 @@ function renderMain(): void {
   mainRoot.replaceChildren();
 
   const topBar = el("header", "top-bar");
-
   const closeBtn = el("button", "close-btn", "✕");
   closeBtn.type = "button";
-  closeBtn.title = "Exit dashboard";
-  closeBtn.setAttribute("aria-label", "Exit");
   closeBtn.addEventListener("click", () => void exitApp());
   topBar.appendChild(closeBtn);
 
@@ -450,6 +506,7 @@ function renderMain(): void {
 
   mainRoot.appendChild(topBar);
   mainRoot.appendChild(renderInfoStrip());
+  mainRoot.appendChild(renderFilterBar());
 
   const grid = el("main", "main-grid");
 
@@ -484,6 +541,7 @@ function applyDashboardData(data: DashboardData): void {
   }
 
   renderMain();
+  if (detailItem) return;
   renderOverlay();
 }
 

@@ -1,3 +1,5 @@
+export type PlanCategory = "work" | "personal";
+
 export interface PlanItem {
   index: number;
   time?: string;
@@ -5,12 +7,25 @@ export interface PlanItem {
   description?: string;
   done: boolean;
   raw: string;
+  category?: PlanCategory;
+  important?: boolean;
+  dueDate?: string;
+  overdue?: boolean;
   image?: string;
   attachment?: string;
   thumbUrl?: string;
   imageUrl?: string;
   attachmentUrl?: string;
   archivedImageUrl?: string;
+}
+
+export interface PlanUpdatePayload {
+  index: number;
+  done?: boolean;
+  time?: string | null;
+  dueDate?: string | null;
+  category?: PlanCategory;
+  important?: boolean;
 }
 
 export interface PlanResponse {

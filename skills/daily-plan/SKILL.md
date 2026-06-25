@@ -24,11 +24,20 @@ memory/YYYY-MM-DD.md
 
 ### Field rules
 
-- **Time** (optional): `HH:MM` or `HH:MM AM/PM` — editable on the Pi by tapping a row
+- **Time** (optional): `HH:MM` or `HH:MM AM/PM` — set on the Pi via touch clock picker (tap a row)
 - **Title** before ` — ` (em dash); **description** after
 - **Done**: `[x]` / pending `[ ]`
+- **Category**: `{work}` or `{personal}` (default is personal if omitted)
+- **Important**: `{important}` — floats to top of the list
+- **Due date**: `{date:YYYY-MM-DD}` — floats to top; turns red after the date passes
 - **Image**: `{img:file.jpg}` in `uploads/images/`
 - **Attachment**: `{attach:file.pdf}`
+
+### Sorting on the dashboard
+
+1. Items with `{important}` or `{date:...}` appear first (in add order among themselves)
+2. All other items follow in add order
+3. Items with a past time (today) or past due date show in **red**
 
 ## When to update
 
@@ -43,11 +52,12 @@ memory/YYYY-MM-DD.md
 
 ## Plan
 - [ ] 08:00 COFFEE — Morning routine
-- [ ] 14:00 CAMP GEAR — Clean floor
-- [ ] 15:00 REVIEW PRS — OpenClaw
+- [ ] 14:00 CAMP GEAR — Clean floor {important}
+- [ ] 15:00 REVIEW PRS — OpenClaw {work}
+- [ ] 18:00 DENTIST — Appointment {date:2026-06-25} {work}
 
 ## Notes
-- Tap a row on the Pi to edit time.
+- Tap a row on the Pi to edit time, date, category, and important flag.
 ```
 
 ## Do not

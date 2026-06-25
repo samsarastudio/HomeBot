@@ -1,10 +1,10 @@
-import type { PlanResponse } from "@homebot/shared";
+import type { PlanResponse, PlanUpdatePayload } from "@homebot/shared";
 
-export async function togglePlanItem(index: number, done: boolean): Promise<PlanResponse> {
+async function putPlan(body: PlanUpdatePayload): Promise<PlanResponse> {
   const res = await fetch("/api/plan", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ index, done }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = (await res.json()) as { error?: string };
@@ -13,17 +13,12 @@ export async function togglePlanItem(index: number, done: boolean): Promise<Plan
   return res.json() as Promise<PlanResponse>;
 }
 
-export async function updatePlanItemTime(index: number, time: string): Promise<PlanResponse> {
-  const res = await fetch("/api/plan", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ index, time }),
-  });
-  if (!res.ok) {
-    const err = (await res.json()) as { error?: string };
-    throw new Error(err.error ?? "Failed to update time");
-  }
-  return res.json() as Promise<PlanResponse>;
+export async function togglePlanItem(index: number, done: boolean): Promise<PlanResponse> {
+  return putPlan({ index, done });
+}
+
+export async function updatePlanItem(payload: PlanUpdatePayload): Promise<PlanResponse> {
+  return putPlan(payload);
 }
 
 export async function dismissNotification(id: string): Promise<void> {

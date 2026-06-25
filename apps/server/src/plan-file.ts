@@ -1,8 +1,9 @@
-import type { PlanItem, PlanResponse } from "@homebot/shared";
+import type { PlanCategory, PlanItem, PlanResponse } from "@homebot/shared";
 import { readWorkspaceFile, writeWorkspaceFile } from "./openclaw/workspace.js";
 import { todayDateString } from "./openclaw/state-root.js";
 import { attachmentUrl, mediaUrlsForImage } from "./media/urls.js";
 import { parseExtraEvents } from "./events/parser.js";
+import { enrichPlanItemMeta, sortPlanItems } from "./plan-sort.js";
 
 const PLAN_HEADER = "## Plan";
 const CHECKBOX_RE = /^- \[([ xX])\]\s*(.*)$/;
@@ -10,12 +11,32 @@ const CHECKBOX_RE = /^- \[([ xX])\]\s*(.*)$/;
 const TOKEN_IMG = /\{img:([^}]+)\}/i;
 const TOKEN_ATTACH = /\{attach:([^}]+)\}/i;
 const TOKEN_ATTACH_ALT = /\battach:([^\s|{}]+)/i;
-const TOKEN_LEGACY = /\{(?:checkin:[^}]+|work|personal)\}/gi;
+const TOKEN_WORK = /\{work\}/i;
+const TOKEN_PERSONAL = /\{personal\}/i;
+const TOKEN_IMPORTANT = /\{important\}/i;
+const TOKEN_DATE = /\{date:([^}]+)\}/i;
 const MD_IMG = /!\[[^\]]*\]\(([^)]+)\)/;
 
-const TRAILING_TOKEN_RES = [TOKEN_IMG, TOKEN_ATTACH, TOKEN_ATTACH_ALT, TOKEN_LEGACY, MD_IMG];
+const TRAILING_TOKEN_RES = [
+  TOKEN_IMG,
+  TOKEN_ATTACH,
+  TOKEN_ATTACH_ALT,
+  TOKEN_DATE,
+  TOKEN_IMPORTANT,
+  TOKEN_WORK,
+  TOKEN_PERSONAL,
+  MD_IMG,
+];
 
-export function parsePlanSection(content: string): PlanItem[] {
+interface ItemTokens {
+  image?: string;
+  attachment?: string;
+  category: PlanCategory;
+  important: boolean;
+  dueDate?: string;
+}
+
+export function parsePlanSection(content: string, todayYmd = todayDateString()): PlanItem[] {
   const lines = content.split(/\r?\n/);
   const start = lines.findIndex((l) => l.trim() === PLAN_HEADER);
   if (start === -1) return [];
@@ -32,86 +53,80 @@ export function parsePlanSection(content: string): PlanItem[] {
 
     const done = match[1]!.toLowerCase() === "x";
     const body = match[2]!.trim();
-    const tokens = extractMediaTokens(body);
-    const parsed = parsePlanLine(tokens.text);
+    const { core, tokens } = splitBodyAndTokens(body);
+    const parsed = parsePlanLine(core);
 
-    items.push(enrichPlanItem({
-      index,
-      ...parsed,
-      done,
-      raw: line,
-      image: tokens.image,
-      attachment: tokens.attachment,
-    }));
+    items.push(
+      enrichPlanItemMeta(
+        enrichPlanItem({
+          index,
+          ...parsed,
+          done,
+          raw: line,
+          category: tokens.category,
+          important: tokens.important,
+          dueDate: tokens.dueDate,
+          image: tokens.image,
+          attachment: tokens.attachment,
+        }),
+        todayYmd,
+      ),
+    );
     index++;
   }
 
   return items;
 }
 
-function extractMediaTokens(body: string): { text: string; image?: string; attachment?: string } {
-  let text = body;
-  let image: string | undefined;
-  let attachment: string | undefined;
-
-  const mdMatch = text.match(MD_IMG);
-  if (mdMatch) {
-    image = imageBasename(mdMatch[1]!.trim());
-    text = text.replace(MD_IMG, "").trim();
-  }
-
-  const imgMatch = text.match(TOKEN_IMG);
-  if (imgMatch) {
-    image = imageBasename(imgMatch[1]!.trim());
-    text = text.replace(TOKEN_IMG, "").trim();
-  }
-
-  const attachBrace = text.match(TOKEN_ATTACH);
-  if (attachBrace) {
-    attachment = attachBrace[1]!.trim();
-    text = text.replace(TOKEN_ATTACH, "").trim();
-  } else {
-    const attachAlt = text.match(TOKEN_ATTACH_ALT);
-    if (attachAlt) {
-      attachment = attachAlt[1]!.trim();
-      text = text.replace(TOKEN_ATTACH_ALT, "").trim();
-    }
-  }
-
-  text = text.replace(TOKEN_LEGACY, "").replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
-  return { text, image, attachment };
-}
-
-function splitBodyAndSuffix(body: string): { core: string; suffix: string } {
+function splitBodyAndTokens(body: string): { core: string; tokens: ItemTokens } {
   let text = body.trim();
-  const suffixParts: string[] = [];
+  const tokens: ItemTokens = { category: "personal", important: false };
   let changed = true;
 
   while (changed) {
     changed = false;
     for (const re of TRAILING_TOKEN_RES) {
       const match = text.match(re);
-      if (match) {
-        suffixParts.push(match[0]);
-        text = text.replace(re, "").trim();
-        changed = true;
-        break;
-      }
+      if (!match) continue;
+
+      if (re === TOKEN_IMG) tokens.image = imageBasename(match[1]!.trim());
+      else if (re === TOKEN_ATTACH) tokens.attachment = match[1]!.trim();
+      else if (re === TOKEN_ATTACH_ALT) tokens.attachment = match[1]!.trim();
+      else if (re === TOKEN_DATE) tokens.dueDate = match[1]!.trim();
+      else if (re === TOKEN_IMPORTANT) tokens.important = true;
+      else if (re === TOKEN_WORK) tokens.category = "work";
+      else if (re === TOKEN_PERSONAL) tokens.category = "personal";
+      else if (re === MD_IMG) tokens.image = imageBasename(match[1]!.trim());
+
+      text = text.replace(re, "").trim();
+      changed = true;
+      break;
     }
   }
 
-  return { core: text.replace(/\s+/g, " ").trim(), suffix: suffixParts.join(" ") };
+  return { core: text.replace(/\s+/g, " ").trim(), tokens };
+}
+
+function serializeTokens(tokens: ItemTokens): string {
+  const parts: string[] = [];
+  if (tokens.category === "work") parts.push("{work}");
+  if (tokens.important) parts.push("{important}");
+  if (tokens.dueDate) parts.push(`{date:${tokens.dueDate}}`);
+  if (tokens.image) parts.push(`{img:${tokens.image}}`);
+  if (tokens.attachment) parts.push(`{attach:${tokens.attachment}}`);
+  return parts.join(" ");
 }
 
 function buildPlanBody(
   time: string | undefined,
   title: string,
   description: string | undefined,
-  suffix: string,
+  tokens: ItemTokens,
 ): string {
   let core = time?.trim() ? `${time.trim()} ` : "";
   core += title;
   if (description) core += ` — ${description}`;
+  const suffix = serializeTokens(tokens);
   return suffix ? `${core} ${suffix}`.trim() : core.trim();
 }
 
@@ -126,12 +141,8 @@ function imageBasename(path: string): string {
 
 function enrichPlanItem(item: PlanItem): PlanItem {
   const enriched = { ...item };
-  if (item.image) {
-    Object.assign(enriched, mediaUrlsForImage(item.image));
-  }
-  if (item.attachment) {
-    enriched.attachmentUrl = attachmentUrl(item.attachment);
-  }
+  if (item.image) Object.assign(enriched, mediaUrlsForImage(item.image));
+  if (item.attachment) enriched.attachmentUrl = attachmentUrl(item.attachment);
   return enriched;
 }
 
@@ -155,12 +166,13 @@ export function planMemoryPath(date = new Date()): string {
 export async function getPlan(date = new Date()): Promise<PlanResponse> {
   const path = planMemoryPath(date);
   const file = await readWorkspaceFile(path);
-  const items = file.exists ? parsePlanSection(file.content) : [];
-  const pending = items.filter((i) => !i.done);
-  const done = items.filter((i) => i.done);
+  const today = todayDateString(date);
+  const items = file.exists ? parsePlanSection(file.content, today) : [];
+  const pending = sortPlanItems(items.filter((i) => !i.done));
+  const done = sortPlanItems(items.filter((i) => i.done));
 
   return {
-    date: todayDateString(date),
+    date: today,
     path,
     exists: file.exists,
     items,
@@ -185,7 +197,13 @@ export async function getReferencedMediaFilenames(): Promise<Set<string>> {
 
 export async function updatePlanItem(
   index: number,
-  updates: { done?: boolean; time?: string },
+  updates: {
+    done?: boolean;
+    time?: string | null;
+    dueDate?: string | null;
+    category?: PlanCategory;
+    important?: boolean;
+  },
   date = new Date(),
 ): Promise<PlanResponse> {
   const path = planMemoryPath(date);
@@ -209,10 +227,19 @@ export async function updatePlanItem(
     if (currentIndex === index) {
       const body = match[2]!.trim();
       const done = updates.done !== undefined ? updates.done : match[1]!.toLowerCase() === "x";
-      const { core, suffix } = splitBodyAndSuffix(body);
+      const { core, tokens } = splitBodyAndTokens(body);
       const parsed = parsePlanLine(core);
-      const time = updates.time !== undefined ? updates.time.trim() : parsed.time;
-      const newBody = buildPlanBody(time || undefined, parsed.title, parsed.description, suffix);
+
+      if (updates.category !== undefined) tokens.category = updates.category;
+      if (updates.important !== undefined) tokens.important = updates.important;
+      if (updates.dueDate === null) tokens.dueDate = undefined;
+      else if (updates.dueDate !== undefined) tokens.dueDate = updates.dueDate.trim() || undefined;
+
+      let time = parsed.time;
+      if (updates.time === null) time = undefined;
+      else if (updates.time !== undefined) time = updates.time.trim() || undefined;
+
+      const newBody = buildPlanBody(time, parsed.title, parsed.description, tokens);
       lines[i] = `- [${done ? "x" : " "}] ${newBody}`;
       updated = true;
       break;

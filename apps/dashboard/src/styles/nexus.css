@@ -372,11 +372,92 @@ body {
   background: rgba(168, 85, 247, 0.12);
 }
 
-.plan-time {
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(138, 92, 255, 0.35);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.filter-chip.active {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.2);
+  color: var(--text-primary);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+}
+
+.filter-chip:active {
+  transform: scale(0.97);
+}
+
+.plan-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.plan-badge {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.plan-badge.important {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+}
+
+.plan-badge.work {
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.plan-time,
+.plan-date {
   color: var(--accent-blue);
   font-weight: 700;
-  min-width: 72px;
+  font-size: 0.85rem;
   pointer-events: none;
+}
+
+.plan-time {
+  min-width: 0;
+}
+
+.plan-date {
+  color: var(--accent-purple);
+}
+
+.plan-item.overdue .plan-body {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.overdue-text {
+  color: var(--danger) !important;
+}
+
+.plan-item.important:not(.overdue) .plan-body {
+  border-color: rgba(251, 191, 36, 0.25);
 }
 
 .plan-text {
@@ -459,9 +540,17 @@ body {
   font-size: 0.75rem;
 }
 
-.panel-done .plan-time {
-  font-size: 0.7rem;
-  min-width: 0;
+.panel-done .plan-meta-row {
+  display: inline;
+  margin-bottom: 0;
+}
+
+.panel-done .plan-badge,
+.panel-done .plan-date {
+  display: none;
+}
+
+.panel-done .plan-meta-row .plan-time {
   display: inline;
   margin-right: 6px;
 }
@@ -693,6 +782,193 @@ body {
 .detail-meta {
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.picker-section-label {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--accent-blue);
+  margin: 16px 0 8px;
+}
+
+.picker-section-label:first-of-type {
+  margin-top: 0;
+}
+
+.detail-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.touch-clock-picker,
+.touch-calendar-picker {
+  border: 1px solid rgba(138, 92, 255, 0.25);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.touch-clock-picker.is-cleared,
+.touch-calendar-picker.is-cleared {
+  opacity: 0.55;
+}
+
+.picker-clock-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.picker-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 72px;
+}
+
+.picker-stepper-label {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.picker-stepper-value {
+  font-family: "Orbitron", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-width: 56px;
+  text-align: center;
+  color: var(--accent-blue);
+}
+
+.picker-step-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(138, 92, 255, 0.4);
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.picker-colon {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  align-self: flex-end;
+  padding-bottom: 12px;
+}
+
+.picker-ampm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-self: flex-end;
+}
+
+.picker-ampm-btn {
+  min-width: 52px;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.picker-ampm-btn.active {
+  border-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent-blue);
+}
+
+.picker-clear-btn {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.cal-header {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cal-title {
+  text-align: center;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+}
+
+.cal-nav-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(138, 92, 255, 0.35);
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 4px 0;
+  font-family: "Orbitron", sans-serif;
+}
+
+.cal-day {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cal-day.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.25);
+  color: var(--text-primary);
+}
+
+.cal-day-empty {
+  background: transparent;
+  pointer-events: none;
 }
 
 .notification-card {
