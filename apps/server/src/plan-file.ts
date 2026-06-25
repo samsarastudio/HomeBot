@@ -15,6 +15,7 @@ const TOKEN_WORK = /\{work\}/i;
 const TOKEN_PERSONAL = /\{personal\}/i;
 const TOKEN_IMPORTANT = /\{important\}/i;
 const TOKEN_DATE = /\{date:([^}]+)\}/i;
+const TOKEN_ADDED = /\{added:(\d+)\}/i;
 const MD_IMG = /!\[[^\]]*\]\(([^)]+)\)/;
 
 const TRAILING_TOKEN_RES = [
@@ -22,6 +23,7 @@ const TRAILING_TOKEN_RES = [
   TOKEN_ATTACH,
   TOKEN_ATTACH_ALT,
   TOKEN_DATE,
+  TOKEN_ADDED,
   TOKEN_IMPORTANT,
   TOKEN_WORK,
   TOKEN_PERSONAL,
@@ -34,6 +36,7 @@ interface ItemTokens {
   category: PlanCategory;
   important: boolean;
   dueDate?: string;
+  addedAt?: string;
 }
 
 export function parsePlanSection(content: string, todayYmd = todayDateString()): PlanItem[] {
@@ -66,6 +69,7 @@ export function parsePlanSection(content: string, todayYmd = todayDateString()):
           category: tokens.category,
           important: tokens.important,
           dueDate: tokens.dueDate,
+          addedAt: tokens.addedAt,
           image: tokens.image,
           attachment: tokens.attachment,
         }),
@@ -93,6 +97,7 @@ function splitBodyAndTokens(body: string): { core: string; tokens: ItemTokens } 
       else if (re === TOKEN_ATTACH) tokens.attachment = match[1]!.trim();
       else if (re === TOKEN_ATTACH_ALT) tokens.attachment = match[1]!.trim();
       else if (re === TOKEN_DATE) tokens.dueDate = match[1]!.trim();
+      else if (re === TOKEN_ADDED) tokens.addedAt = parseAddedToken(match[1]!.trim());
       else if (re === TOKEN_IMPORTANT) tokens.important = true;
       else if (re === TOKEN_WORK) tokens.category = "work";
       else if (re === TOKEN_PERSONAL) tokens.category = "personal";
@@ -107,11 +112,27 @@ function splitBodyAndTokens(body: string): { core: string; tokens: ItemTokens } 
   return { core: text.replace(/\s+/g, " ").trim(), tokens };
 }
 
+function parseAddedToken(raw: string): string | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const ms = raw.length >= 13 ? n : n * 1000;
+  return new Date(ms).toISOString();
+}
+
+function serializeAddedAt(addedAt?: string): string | undefined {
+  if (!addedAt) return undefined;
+  const ms = new Date(addedAt).getTime();
+  if (!Number.isFinite(ms)) return undefined;
+  return String(ms);
+}
+
 function serializeTokens(tokens: ItemTokens): string {
   const parts: string[] = [];
   if (tokens.category === "work") parts.push("{work}");
   if (tokens.important) parts.push("{important}");
   if (tokens.dueDate) parts.push(`{date:${tokens.dueDate}}`);
+  const added = serializeAddedAt(tokens.addedAt);
+  if (added) parts.push(`{added:${added}}`);
   if (tokens.image) parts.push(`{img:${tokens.image}}`);
   if (tokens.attachment) parts.push(`{attach:${tokens.attachment}}`);
   return parts.join(" ");
@@ -168,8 +189,8 @@ export async function getPlan(date = new Date()): Promise<PlanResponse> {
   const file = await readWorkspaceFile(path);
   const today = todayDateString(date);
   const items = file.exists ? parsePlanSection(file.content, today) : [];
-  const pending = sortPlanItems(items.filter((i) => !i.done));
-  const done = sortPlanItems(items.filter((i) => i.done));
+  const pending = sortPlanItems(items.filter((i) => !i.done), today);
+  const done = sortPlanItems(items.filter((i) => i.done), today);
 
   return {
     date: today,

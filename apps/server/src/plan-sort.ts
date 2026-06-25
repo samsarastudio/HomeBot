@@ -1,16 +1,24 @@
 import type { PlanItem } from "@homebot/shared";
 
-export function isPriorityItem(item: PlanItem): boolean {
-  return Boolean(item.important || item.dueDate);
+export function isTimeBound(item: PlanItem): boolean {
+  return Boolean(item.time || item.dueDate);
 }
 
-/** Priority items first, then original add order (index). */
-export function sortPlanItems(items: PlanItem[]): PlanItem[] {
+/** Time-bound items first (by schedule), then newest-added items. */
+export function sortPlanItems(items: PlanItem[], todayYmd: string): PlanItem[] {
   return [...items].sort((a, b) => {
-    const aPri = isPriorityItem(a);
-    const bPri = isPriorityItem(b);
-    if (aPri !== bPri) return aPri ? -1 : 1;
-    return a.index - b.index;
+    const aBound = isTimeBound(a);
+    const bBound = isTimeBound(b);
+    if (aBound !== bBound) return aBound ? -1 : 1;
+
+    if (aBound && bBound) {
+      const da = itemDueDateTime(a, todayYmd)?.getTime() ?? 0;
+      const db = itemDueDateTime(b, todayYmd)?.getTime() ?? 0;
+      if (da !== db) return da - db;
+      return b.index - a.index;
+    }
+
+    return b.index - a.index;
   });
 }
 

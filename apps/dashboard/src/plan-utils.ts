@@ -1,15 +1,23 @@
 import type { PlanItem } from "@homebot/shared";
 
-export function isPriorityItem(item: PlanItem): boolean {
-  return Boolean(item.important || item.dueDate);
+export function isTimeBound(item: PlanItem): boolean {
+  return Boolean(item.time || item.dueDate);
 }
 
-export function sortPlanItems(items: PlanItem[]): PlanItem[] {
+export function sortPlanItems(items: PlanItem[], todayYmd: string): PlanItem[] {
   return [...items].sort((a, b) => {
-    const aPri = isPriorityItem(a);
-    const bPri = isPriorityItem(b);
-    if (aPri !== bPri) return aPri ? -1 : 1;
-    return a.index - b.index;
+    const aBound = isTimeBound(a);
+    const bBound = isTimeBound(b);
+    if (aBound !== bBound) return aBound ? -1 : 1;
+
+    if (aBound && bBound) {
+      const da = itemDueDateTime(a, todayYmd)?.getTime() ?? 0;
+      const db = itemDueDateTime(b, todayYmd)?.getTime() ?? 0;
+      if (da !== db) return da - db;
+      return b.index - a.index;
+    }
+
+    return b.index - a.index;
   });
 }
 
@@ -49,4 +57,10 @@ export function isItemOverdue(item: PlanItem, todayYmd: string, now = new Date()
   const due = itemDueDateTime(item, todayYmd);
   if (!due) return false;
   return due.getTime() < now.getTime();
+}
+
+export function formatAgeMinutes(addedAt: string, now = Date.now()): string {
+  const ms = now - new Date(addedAt).getTime();
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  return `${minutes}m`;
 }

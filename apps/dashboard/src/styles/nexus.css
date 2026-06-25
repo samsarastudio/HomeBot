@@ -291,7 +291,8 @@ body {
 
 .panel-body {
   flex: 1;
-  overflow-y: scroll;
+  min-height: 0;
+  overflow-y: auto;
   overflow-x: hidden;
   padding: 8px;
   touch-action: pan-y;
@@ -321,7 +322,6 @@ body {
   gap: 10px;
   min-height: 56px;
   margin-bottom: 8px;
-  touch-action: pan-y;
 }
 
 .plan-check {
@@ -365,7 +365,6 @@ body {
   text-align: left;
   color: inherit;
   font: inherit;
-  touch-action: pan-y;
 }
 
 .plan-body:active {
@@ -409,6 +408,7 @@ body {
   align-items: center;
   gap: 6px;
   margin-bottom: 2px;
+  width: 100%;
 }
 
 .plan-badge {
@@ -429,6 +429,16 @@ body {
 .plan-badge.work {
   color: var(--accent-blue);
   background: rgba(56, 189, 248, 0.12);
+}
+
+.plan-age {
+  margin-left: auto;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .plan-time,
@@ -553,6 +563,14 @@ body {
 .panel-done .plan-meta-row .plan-time {
   display: inline;
   margin-right: 6px;
+  font-size: 0.7rem;
+  min-width: 0;
+}
+
+.panel-done .plan-meta-row .plan-age {
+  display: inline;
+  margin-left: 6px;
+  font-size: 0.6rem;
 }
 
 .panel-done .plan-title {

@@ -35,9 +35,14 @@ memory/YYYY-MM-DD.md
 
 ### Sorting on the dashboard
 
-1. Items with `{important}` or `{date:...}` appear first (in add order among themselves)
-2. All other items follow in add order
+1. Items with a **time** or **due date** appear first (earliest schedule on top)
+2. Items without a schedule follow, **newest added first**
 3. Items with a past time (today) or past due date show in **red**
+
+### Added timestamp
+
+- Optional `{added:UNIX_MS}` token (milliseconds since epoch) — shown on the Pi as elapsed minutes (e.g. `12m`)
+- If omitted, the dashboard records first-seen time for that session
 
 ## When to update
 

@@ -10,6 +10,7 @@ export interface PlanItem {
   category?: PlanCategory;
   important?: boolean;
   dueDate?: string;
+  addedAt?: string;
   overdue?: boolean;
   image?: string;
   attachment?: string;
