@@ -1,11 +1,23 @@
-import type { CalendarNotification, DashboardData, PlanCategory, PlanItem } from "@homebot/shared";
-import { dismissNotification, exitApp, togglePlanItem, updatePlanItem } from "./api";
+import type { CalendarEvent, CalendarNotification, DashboardData, PlanCategory, PlanItem } from "@homebot/shared";
+import {
+  createPlanItem,
+  deferPlanItem,
+  deletePlanItem,
+  dismissNotification,
+  exitApp,
+  snoozeNotification,
+  togglePlanItem,
+  updatePlanItem,
+} from "./api";
 import { gateway } from "./gateway/client";
 import { startLiveDashboard } from "./live-dashboard";
 import { ensureFullscreen } from "./fullscreen";
+import { initLayoutDetection, is7inLayout, isNightDeskHour, tapMoveThreshold } from "./layout";
+import { findNextTimedItem, formatNowNextText } from "./now-next";
 import { formatClock, formatDate, getGreeting } from "./utils/time";
 import { formatAgeMinutes, isItemOverdue, sortPlanItems } from "./plan-utils";
 import { createTouchCalendarPicker, createTouchClockPicker } from "./touch-pickers";
+import { showToast } from "./toast";
 import "./styles/nexus.css";
 
 interface CronPrompt {
@@ -26,6 +38,12 @@ let approval: import("@homebot/shared").ApprovalRequest | null = null;
 let detailItem: PlanItem | null = null;
 let activeNotification: CalendarNotification | null = null;
 let planFilter: PlanFilter = "all";
+let planTab: "pending" | "done" = "pending";
+let apiOnline = true;
+let infoStripExpanded = false;
+let captureOpen = false;
+let focusItem: PlanItem | null = null;
+let notificationQueue: CalendarNotification[] = [];
 let lastOverlayKey = "";
 let lastPlanKey = "";
 let mainShellBuilt = false;
@@ -40,6 +58,17 @@ let countChipEl: HTMLElement | null = null;
 let cpuChipEl: HTMLElement | null = null;
 let ramChipEl: HTMLElement | null = null;
 let diskChipEl: HTMLElement | null = null;
+let infoStripEl: HTMLElement | null = null;
+let infoStripDetailEl: HTMLElement | null = null;
+let nowNextEl: HTMLElement | null = null;
+let eventsRibbonEl: HTMLElement | null = null;
+let offlineBannerEl: HTMLElement | null = null;
+let planTabPendingBtn: HTMLElement | null = null;
+let planTabDoneBtn: HTMLElement | null = null;
+let pendingPanelEl: HTMLElement | null = null;
+let donePanelEl: HTMLElement | null = null;
+let fabEl: HTMLElement | null = null;
+let focusTimerId = 0;
 const addedAtCache = new Map<string, string>();
 
 const app = document.getElementById("app")!;
@@ -151,6 +180,7 @@ function attachPanelScrollGuard(panel: HTMLElement): void {
 function bindTapOpen(target: HTMLElement, item: PlanItem, scrollParent: HTMLElement): void {
   let startY = 0;
   let startX = 0;
+  const threshold = () => tapMoveThreshold();
 
   target.addEventListener(
     "touchstart",
@@ -165,7 +195,7 @@ function bindTapOpen(target: HTMLElement, item: PlanItem, scrollParent: HTMLElem
     if (scrollParent.dataset.scrolling === "1") return;
     const dy = Math.abs(e.changedTouches[0]!.clientY - startY);
     const dx = Math.abs(e.changedTouches[0]!.clientX - startX);
-    if (dy > 15 || dx > 15) return;
+    if (dy > threshold() || dx > threshold()) return;
     openDetail(item);
   });
 
@@ -173,6 +203,61 @@ function bindTapOpen(target: HTMLElement, item: PlanItem, scrollParent: HTMLElem
     if (e.detail === 0) return;
     if (scrollParent.dataset.scrolling === "1") return;
     openDetail(item);
+  });
+}
+
+function bindSwipeGestures(
+  row: HTMLElement,
+  item: PlanItem,
+  done: boolean,
+  scrollParent: HTMLElement,
+): void {
+  if (done) return;
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  row.addEventListener(
+    "touchstart",
+    (e) => {
+      if (scrollParent.dataset.scrolling === "1") return;
+      startX = e.touches[0]!.clientX;
+      startY = e.touches[0]!.clientY;
+      tracking = true;
+      row.style.transition = "none";
+    },
+    { passive: true },
+  );
+
+  row.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!tracking) return;
+      const dx = e.touches[0]!.clientX - startX;
+      const dy = Math.abs(e.touches[0]!.clientY - startY);
+      if (dy > 20) {
+        tracking = false;
+        row.style.transform = "";
+        return;
+      }
+      if (Math.abs(dx) > 8) row.style.transform = `translateX(${dx}px)`;
+    },
+    { passive: true },
+  );
+
+  row.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    row.style.transition = "";
+    const dx = e.changedTouches[0]!.clientX - startX;
+    row.style.transform = "";
+    if (dx > 80) {
+      void togglePlanItem(item.index, true).catch((err) => showToast(String(err), "error"));
+      return;
+    }
+    if (dx < -80) {
+      void deferPlanItem(item.index).catch((err) => showToast(String(err), "error"));
+    }
   });
 }
 
@@ -269,7 +354,7 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
       try {
         await togglePlanItem(item.index, !done);
       } catch (err) {
-        console.error(err);
+        showToast(String(err), "error");
       }
     });
 
@@ -310,6 +395,7 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
     body.appendChild(textWrap);
 
     bindTapOpen(body, item, scrollParent);
+    bindSwipeGestures(row, item, done, scrollParent);
 
     row.appendChild(check);
     row.appendChild(body);
@@ -358,8 +444,20 @@ function renderDetailOverlay(): HTMLElement | null {
   card.appendChild(header);
 
   const body = el("div", "detail-card-body");
-  body.appendChild(el("div", "detail-title", detailItem.title));
-  if (detailItem.description) body.appendChild(el("div", "detail-desc", detailItem.description));
+
+  body.appendChild(el("div", "picker-section-label", "TITLE"));
+  const titleInput = document.createElement("input");
+  titleInput.className = "detail-title-input";
+  titleInput.type = "text";
+  titleInput.value = detailItem.title;
+  body.appendChild(titleInput);
+
+  body.appendChild(el("div", "picker-section-label", "DESCRIPTION"));
+  const descInput = document.createElement("textarea");
+  descInput.className = "detail-desc-input";
+  descInput.rows = 2;
+  descInput.value = detailItem.description ?? "";
+  body.appendChild(descInput);
 
   body.appendChild(el("div", "picker-section-label", "TIME"));
   const clock = createTouchClockPicker(detailItem.time);
@@ -423,11 +521,13 @@ function renderDetailOverlay(): HTMLElement | null {
         dueDate: dateVal,
         category,
         important,
+        title: titleInput.value.trim() || detailItem!.title,
+        description: descInput.value.trim() || null,
       });
       detailItem = null;
       renderOverlay(true);
     } catch (err) {
-      console.error(err);
+      showToast(String(err), "error");
     }
   });
 
@@ -439,10 +539,45 @@ function renderDetailOverlay(): HTMLElement | null {
       detailItem = null;
       renderOverlay(true);
     } catch (err) {
-      console.error(err);
+      showToast(String(err), "error");
     }
   });
-  actions.append(saveBtn, toggleBtn);
+
+  const deferBtn = el("button", "btn btn-dismiss", "DEFER TOMORROW");
+  deferBtn.type = "button";
+  deferBtn.addEventListener("click", async () => {
+    try {
+      await deferPlanItem(detailItem!.index);
+      detailItem = null;
+      renderOverlay(true);
+      showToast("Deferred to tomorrow");
+    } catch (err) {
+      showToast(String(err), "error");
+    }
+  });
+
+  const deleteBtn = el("button", "btn btn-deny", "DELETE");
+  deleteBtn.type = "button";
+  deleteBtn.addEventListener("click", async () => {
+    try {
+      await deletePlanItem(detailItem!.index);
+      detailItem = null;
+      renderOverlay(true);
+      showToast("Task deleted");
+    } catch (err) {
+      showToast(String(err), "error");
+    }
+  });
+
+  const focusBtn = el("button", "btn btn-approve", "FOCUS");
+  focusBtn.type = "button";
+  focusBtn.addEventListener("click", () => {
+    focusItem = detailItem;
+    detailItem = null;
+    renderOverlay(true);
+  });
+
+  actions.append(saveBtn, toggleBtn, deferBtn, focusBtn, deleteBtn);
   card.appendChild(body);
   card.appendChild(actions);
   backdrop.appendChild(card);
@@ -455,7 +590,12 @@ function renderNotificationOverlay(): HTMLElement | null {
 
   const backdrop = el("div", "overlay-backdrop notification-backdrop");
   const card = el("div", "overlay-card notification-card");
-  card.appendChild(el("div", "overlay-title", activeNotification.kind === "upcoming" ? "UPCOMING" : "NOW"));
+  const queueCount = notificationQueue.length;
+  const titleText =
+    activeNotification.kind === "upcoming"
+      ? `UPCOMING${queueCount > 1 ? ` (${queueCount})` : ""}`
+      : `NOW${queueCount > 1 ? ` (${queueCount})` : ""}`;
+  card.appendChild(el("div", "overlay-title", titleText));
 
   if (activeNotification.thumbUrl || activeNotification.imageUrl) {
     const img = document.createElement("img");
@@ -473,12 +613,27 @@ function renderNotificationOverlay(): HTMLElement | null {
   dismiss.type = "button";
   dismiss.addEventListener("click", async () => {
     const id = activeNotification!.id;
+    notificationQueue = notificationQueue.filter((n) => n.id !== id);
     activeNotification = null;
     await dismissNotification(id).catch(() => {});
+    showNextNotification();
     renderOverlay(true);
   });
+
+  const snooze = el("button", "btn btn-dismiss", "SNOOZE 5M");
+  snooze.type = "button";
+  snooze.addEventListener("click", async () => {
+    const id = activeNotification!.id;
+    notificationQueue = notificationQueue.filter((n) => n.id !== id);
+    activeNotification = null;
+    await snoozeNotification(id, 5).catch(() => {});
+    showNextNotification();
+    renderOverlay(true);
+    showToast("Snoozed 5 minutes");
+  });
+
   const actions = el("div", "overlay-actions");
-  actions.appendChild(dismiss);
+  actions.append(snooze, dismiss);
   card.appendChild(actions);
   backdrop.appendChild(card);
   return backdrop;
@@ -545,7 +700,139 @@ function renderCronOverlay(): HTMLElement | null {
   return backdrop;
 }
 
+function showNextNotification(): void {
+  notificationQueue = notificationQueue.filter((n) => n.id !== activeNotification?.id);
+  activeNotification = notificationQueue[0] ?? null;
+}
+
+function renderQuickCaptureOverlay(): HTMLElement | null {
+  if (!captureOpen) return null;
+
+  const backdrop = el("div", "overlay-backdrop");
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      captureOpen = false;
+      renderOverlay(true);
+    }
+  });
+
+  const card = el("div", "overlay-card detail-card");
+  card.appendChild(el("div", "overlay-title", "QUICK CAPTURE"));
+
+  const body = el("div", "detail-card-body");
+  body.appendChild(el("div", "picker-section-label", "TITLE"));
+  const titleInput = document.createElement("input");
+  titleInput.className = "detail-title-input";
+  titleInput.placeholder = "What needs doing?";
+  body.appendChild(titleInput);
+
+  const tagRow = el("div", "detail-tag-row");
+  let category: PlanCategory = "personal";
+  const personalBtn = el("button", "filter-chip active", "PERSONAL");
+  const workBtn = el("button", "filter-chip", "WORK");
+  personalBtn.type = "button";
+  workBtn.type = "button";
+  personalBtn.addEventListener("click", () => {
+    category = "personal";
+    personalBtn.classList.add("active");
+    workBtn.classList.remove("active");
+  });
+  workBtn.addEventListener("click", () => {
+    category = "work";
+    workBtn.classList.add("active");
+    personalBtn.classList.remove("active");
+  });
+  tagRow.append(personalBtn, workBtn);
+  body.appendChild(tagRow);
+  card.appendChild(body);
+
+  const actions = el("div", "overlay-actions");
+  const addBtn = el("button", "btn btn-approve", "ADD");
+  addBtn.type = "button";
+  addBtn.addEventListener("click", async () => {
+    const title = titleInput.value.trim();
+    if (!title) {
+      showToast("Enter a title", "error");
+      return;
+    }
+    try {
+      await createPlanItem({ title, category });
+      captureOpen = false;
+      renderOverlay(true);
+      showToast("Task added");
+    } catch (err) {
+      showToast(String(err), "error");
+    }
+  });
+  const cancelBtn = el("button", "btn btn-dismiss", "CANCEL");
+  cancelBtn.type = "button";
+  cancelBtn.addEventListener("click", () => {
+    captureOpen = false;
+    renderOverlay(true);
+  });
+  actions.append(addBtn, cancelBtn);
+  card.appendChild(actions);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
+function renderFocusOverlay(): HTMLElement | null {
+  if (!focusItem) return null;
+
+  window.clearInterval(focusTimerId);
+
+  const backdrop = el("div", "overlay-backdrop focus-backdrop");
+  const card = el("div", "overlay-card focus-card");
+  card.appendChild(el("div", "overlay-title", "FOCUS MODE"));
+  card.appendChild(el("div", "focus-task-title", focusItem.title));
+  if (focusItem.description) card.appendChild(el("div", "focus-task-desc", focusItem.description));
+  if (focusItem.time) card.appendChild(el("div", "overlay-meta", focusItem.time));
+
+  let secondsLeft = 25 * 60;
+  const timerEl = el("div", "focus-timer", "25:00");
+  card.appendChild(timerEl);
+  const timerId = window.setInterval(() => {
+    secondsLeft -= 1;
+    if (secondsLeft <= 0) {
+      window.clearInterval(timerId);
+      timerEl.textContent = "Done!";
+      return;
+    }
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    timerEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
+  }, 1000);
+  focusTimerId = timerId;
+
+  const doneBtn = el("button", "btn btn-approve", "MARK DONE");
+  doneBtn.type = "button";
+  doneBtn.addEventListener("click", async () => {
+    window.clearInterval(focusTimerId);
+    try {
+      await togglePlanItem(focusItem!.index, true);
+      focusItem = null;
+      renderOverlay(true);
+    } catch (err) {
+      showToast(String(err), "error");
+    }
+  });
+  const exitBtn = el("button", "btn btn-dismiss", "EXIT FOCUS");
+  exitBtn.type = "button";
+  exitBtn.addEventListener("click", () => {
+    window.clearInterval(focusTimerId);
+    focusItem = null;
+    renderOverlay(true);
+  });
+  const actions = el("div", "overlay-actions");
+  actions.append(doneBtn, exitBtn);
+  card.appendChild(actions);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
 function overlayKey(): string {
+  if (focusItem) return `focus:${focusItem.index}`;
+  if (captureOpen) return "capture";
   if (approval) return `approval:${approval.requestId}`;
   if (activeNotification) return `notif:${activeNotification.id}`;
   if (detailItem) return `detail:${detailItem.index}`;
@@ -558,6 +845,8 @@ function buildOverlay(): HTMLElement | null {
   return (
     renderApprovalOverlay() ??
     renderNotificationOverlay() ??
+    renderFocusOverlay() ??
+    renderQuickCaptureOverlay() ??
     (detailItem ? renderDetailOverlay() : null) ??
     renderCronOverlay()
   );
@@ -580,15 +869,63 @@ function updateAgeLabels(): void {
   }
 }
 
+function updateOfflineBanner(): void {
+  if (!offlineBannerEl) return;
+  offlineBannerEl.classList.toggle("visible", !apiOnline);
+  offlineBannerEl.textContent = apiOnline ? "" : "OFFLINE — retrying connection…";
+}
+
+function updateNowNextStrip(): void {
+  if (!nowNextEl || !dashboard) return;
+  const pending = filterItems(dashboard.todolist.plan.pending);
+  const next = findNextTimedItem(pending, todayYmd());
+  if (!next) {
+    nowNextEl.textContent = "No timed tasks ahead";
+    nowNextEl.classList.add("empty");
+    return;
+  }
+  nowNextEl.classList.remove("empty");
+  nowNextEl.textContent = formatNowNextText(next);
+}
+
+function formatEventTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function updateEventsRibbon(): void {
+  if (!eventsRibbonEl || !dashboard) return;
+  eventsRibbonEl.replaceChildren();
+  const events = [...(dashboard.events ?? [])].sort(
+    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+  );
+  if (events.length === 0) {
+    eventsRibbonEl.appendChild(el("span", "events-empty", "No events today"));
+    return;
+  }
+  for (const event of events.slice(0, 6)) {
+    const chip = el("span", "event-chip", `${formatEventTime(event.startAt)} ${event.title}`);
+    eventsRibbonEl.appendChild(chip);
+  }
+}
+
+function updatePlanTabVisibility(): void {
+  const useTabs = is7inLayout();
+  if (pendingPanelEl) pendingPanelEl.classList.toggle("tab-hidden", useTabs && planTab !== "pending");
+  if (donePanelEl) donePanelEl.classList.toggle("tab-hidden", useTabs && planTab !== "done");
+  if (planTabPendingBtn) planTabPendingBtn.classList.toggle("active", planTab === "pending");
+  if (planTabDoneBtn) planTabDoneBtn.classList.toggle("active", planTab === "done");
+}
+
 function updateInfoStrip(): void {
   const done = dashboard?.todolist.completed ?? 0;
   const pending = dashboard?.todolist.pending ?? 0;
   const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
 
   if (gatewayChipEl) {
-    gatewayChipEl.className = `info-chip ${gatewayOnline ? "online" : "offline"}`;
+    const online = apiOnline && gatewayOnline;
+    gatewayChipEl.className = `info-chip ${online ? "online" : "offline"}`;
     const label = gatewayChipEl.lastChild;
-    if (label) label.textContent = gatewayOnline ? "ONLINE" : "OFFLINE";
+    if (label) label.textContent = online ? "ONLINE" : "OFFLINE";
   }
   if (cronChipEl) cronChipEl.textContent = `CRON ${cronCount}`;
   if (runChipEl) runChipEl.textContent = `RUN ${dashboard?.tasks.running ?? 0}`;
@@ -600,6 +937,13 @@ function updateInfoStrip(): void {
     if (ramChipEl) ramChipEl.textContent = `RAM ${sys.ram}`;
     if (diskChipEl) diskChipEl.textContent = `DISK ${sys.disk}`;
   }
+
+  if (infoStripDetailEl) {
+    infoStripDetailEl.classList.toggle("expanded", infoStripExpanded);
+  }
+  updateNowNextStrip();
+  updateEventsRibbon();
+  updateOfflineBanner();
 }
 
 function updatePanelHeaders(): void {
@@ -607,6 +951,8 @@ function updatePanelHeaders(): void {
   const doneCount = filterItems(dashboard?.todolist.plan.done ?? []).length;
   if (pendingHeaderEl) pendingHeaderEl.textContent = `TODAY'S PLAN (${pendingCount})`;
   if (doneHeaderEl) doneHeaderEl.textContent = `DONE TODAY (${doneCount})`;
+  if (planTabPendingBtn) planTabPendingBtn.textContent = `PLAN (${pendingCount})`;
+  if (planTabDoneBtn) planTabDoneBtn.textContent = `DONE (${doneCount})`;
 }
 
 function updatePlanPanels(): void {
@@ -632,6 +978,7 @@ function updatePlanPanels(): void {
   updatePanelHeaders();
   updateAgeLabels();
   updateInfoStrip();
+  updatePlanTabVisibility();
 }
 
 function renderFilterBar(): HTMLElement {
@@ -653,17 +1000,15 @@ function renderFilterBar(): HTMLElement {
 
 function renderInfoStrip(): HTMLElement {
   const strip = el("div", "info-strip");
+  strip.addEventListener("click", () => {
+    infoStripExpanded = !infoStripExpanded;
+    updateInfoStrip();
+  });
+
   gatewayChipEl = el("span", `info-chip ${gatewayOnline ? "online" : "offline"}`);
   gatewayChipEl.appendChild(el("span", "dot"));
   gatewayChipEl.appendChild(document.createTextNode(gatewayOnline ? "ONLINE" : "OFFLINE"));
   strip.appendChild(gatewayChipEl);
-
-  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
-  cronChipEl = el("span", "info-chip", `CRON ${cronCount}`);
-  strip.appendChild(cronChipEl);
-
-  runChipEl = el("span", "info-chip", `RUN ${dashboard?.tasks.running ?? 0}`);
-  strip.appendChild(runChipEl);
 
   const done = dashboard?.todolist.completed ?? 0;
   const pending = dashboard?.todolist.pending ?? 0;
@@ -673,16 +1018,30 @@ function renderInfoStrip(): HTMLElement {
   const sys = dashboard?.system;
   if (sys) {
     cpuChipEl = el("span", "info-chip", `CPU ${sys.cpu}`);
-    ramChipEl = el("span", "info-chip", `RAM ${sys.ram}`);
-    diskChipEl = el("span", "info-chip", `DISK ${sys.disk}`);
-    strip.append(cpuChipEl, ramChipEl, diskChipEl);
+    strip.appendChild(cpuChipEl);
   }
 
+  infoStripDetailEl = el("div", "info-strip-detail");
+  const cronCount = dashboard?.cron_jobs.filter((j) => j.enabled).length ?? 0;
+  cronChipEl = el("span", "info-chip", `CRON ${cronCount}`);
+  runChipEl = el("span", "info-chip", `RUN ${dashboard?.tasks.running ?? 0}`);
+  infoStripDetailEl.append(cronChipEl, runChipEl);
+  if (sys) {
+    ramChipEl = el("span", "info-chip", `RAM ${sys.ram}`);
+    diskChipEl = el("span", "info-chip", `DISK ${sys.disk}`);
+    infoStripDetailEl.append(ramChipEl, diskChipEl);
+  }
+  strip.appendChild(infoStripDetailEl);
+
+  infoStripEl = strip;
   return strip;
 }
 
 function buildMainShell(): void {
   mainRoot.replaceChildren();
+
+  offlineBannerEl = el("div", "offline-banner");
+  mainRoot.appendChild(offlineBannerEl);
 
   const topBar = el("header", "top-bar");
   const closeBtn = el("button", "close-btn", "✕");
@@ -704,12 +1063,39 @@ function buildMainShell(): void {
   topBar.appendChild(clock);
 
   mainRoot.appendChild(topBar);
+
+  nowNextEl = el("div", "now-next-strip empty", "No timed tasks ahead");
+  mainRoot.appendChild(nowNextEl);
+
   mainRoot.appendChild(renderInfoStrip());
+
+  eventsRibbonEl = el("div", "events-ribbon");
+  mainRoot.appendChild(eventsRibbonEl);
+
   mainRoot.appendChild(renderFilterBar());
+
+  const tabBar = el("div", "plan-tab-bar");
+  planTabPendingBtn = el("button", "plan-tab active", "PLAN");
+  planTabDoneBtn = el("button", "plan-tab", "DONE");
+  planTabPendingBtn.type = "button";
+  planTabDoneBtn.type = "button";
+  planTabPendingBtn.addEventListener("click", () => {
+    planTab = "pending";
+    updatePlanTabVisibility();
+    updatePanelHeaders();
+  });
+  planTabDoneBtn.addEventListener("click", () => {
+    planTab = "done";
+    updatePlanTabVisibility();
+    updatePanelHeaders();
+  });
+  tabBar.append(planTabPendingBtn, planTabDoneBtn);
+  mainRoot.appendChild(tabBar);
 
   const grid = el("main", "main-grid");
 
   const pendingPanel = el("section", "panel");
+  pendingPanelEl = pendingPanel;
   pendingHeaderEl = el("div", "panel-header", "TODAY'S PLAN");
   pendingPanel.appendChild(pendingHeaderEl);
   pendingBodyEl = el("div", "panel-body");
@@ -719,6 +1105,7 @@ function buildMainShell(): void {
   grid.appendChild(pendingPanel);
 
   const donePanel = el("section", "panel panel-done");
+  donePanelEl = donePanel;
   doneHeaderEl = el("div", "panel-header", "DONE TODAY");
   donePanel.appendChild(doneHeaderEl);
   doneBodyEl = el("div", "panel-body");
@@ -728,7 +1115,18 @@ function buildMainShell(): void {
   grid.appendChild(donePanel);
 
   mainRoot.appendChild(grid);
+
+  fabEl = el("button", "fab-add", "+");
+  fabEl.type = "button";
+  fabEl.setAttribute("aria-label", "Add task");
+  fabEl.addEventListener("click", () => {
+    captureOpen = true;
+    renderOverlay(true);
+  });
+  app.appendChild(fabEl);
+
   mainShellBuilt = true;
+  updatePlanTabVisibility();
 }
 
 function renderMain(): void {
@@ -748,8 +1146,13 @@ function applyDashboardData(data: DashboardData): void {
   }
 
   if (!activeNotification && data.pending_notifications.length > 0) {
-    activeNotification = data.pending_notifications[0]!;
+    notificationQueue = [...data.pending_notifications];
+    activeNotification = notificationQueue[0]!;
     renderOverlay(true);
+  } else if (data.pending_notifications.length > notificationQueue.length) {
+    for (const n of data.pending_notifications) {
+      if (!notificationQueue.some((q) => q.id === n.id)) notificationQueue.push(n);
+    }
   }
 
   renderMain();
@@ -760,16 +1163,29 @@ function applyDashboardData(data: DashboardData): void {
 
 function bootstrap(): void {
   ensureFullscreen();
+  initLayoutDetection(() => {
+    updatePlanTabVisibility();
+    updatePanelHeaders();
+  });
   setupGateway();
   setupClock();
+  applyNightDesk();
 
   startLiveDashboard(
     (data) => applyDashboardData(data),
     (notification) => {
-      activeNotification = notification;
+      if (!notificationQueue.some((n) => n.id === notification.id)) {
+        notificationQueue.unshift(notification);
+      }
+      if (!activeNotification) activeNotification = notification;
       renderOverlay(true);
     },
     5000,
+    (online) => {
+      apiOnline = online;
+      updateOfflineBanner();
+      updateInfoStrip();
+    },
   );
 }
 
@@ -804,6 +1220,13 @@ function refreshHeaderTime(now = new Date()): void {
 
   const dateLine = document.getElementById("date-line");
   if (dateLine) dateLine.textContent = formatDate(now);
+
+  updateNowNextStrip();
+  applyNightDesk(now);
+}
+
+function applyNightDesk(now = new Date()): void {
+  document.documentElement.classList.toggle("night-desk", isNightDeskHour(now));
 }
 
 function setupClock(): void {

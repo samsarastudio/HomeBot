@@ -15,6 +15,7 @@ Designed to be followed by a human or by an OpenClaw agent given a git URL.
 - Reads the full local OpenClaw state dir (`~/.openclaw`) — no remote API needed for data
 
 **Runs on:** same Pi as OpenClaw  
+**Display:** optimized for **Freenove FNK0078** 7" DSI (**800×480**, capacitive touch). Kiosk uses Chromium touch flags; dashboard auto-switches to tabbed PLAN/DONE layout at this resolution.  
 **Listens on:** `http://127.0.0.1:8080`  
 **Gateway WebSocket:** `ws://127.0.0.1:18789` (default OpenClaw port)
 

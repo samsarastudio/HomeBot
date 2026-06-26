@@ -8,7 +8,36 @@ Use this document for implementation planning and for OpenClaw agent tasks.
 
 ---
 
-## Summary
+## As-built status (2026-06-24)
+
+The following are **shipped** in the current dashboard:
+
+| Feature | Status |
+|---------|--------|
+| Compact info strip (tap to expand CRON/RUN/RAM/DISK) | Done |
+| Small close button + `/api/exit` | Done |
+| Plan thumbnails + detail images (`{img:}` / `{attach:}`) | Done |
+| Tap row → edit overlay; circle → toggle done | Done |
+| Touch clock/calendar pickers, WORK/PERSONAL filters, age labels | Done |
+| Carry-forward with orange/red bands | Done |
+| Live greeting/clock refresh (late-night hours) | Done |
+| Calendar notifications + snooze 5m + queue count | Done |
+| Events ribbon (today's schedule) | Done |
+| Now/Next countdown strip | Done |
+| Quick capture (`+` FAB), delete, defer to tomorrow | Done |
+| Focus mode (25m timer) | Done |
+| Night desk dimming (10 PM–5 AM) | Done |
+| Swipe right = done, swipe left = defer | Done |
+| 7" Freenove 800×480 layout (tabs, touch scroll tuning) | Done |
+| Offline banner + toast errors | Done |
+| Nightly image archive + purge API | Done |
+| Unit tests + GitHub CI | Done |
+
+**Still open / future:** purge approval overlay, drag-to-reorder, voice capture, external calendar sync, plan history browser.
+
+---
+
+## Summary (original spec)
 
 | Area | Priority | Status today |
 |------|----------|--------------|

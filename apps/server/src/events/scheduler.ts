@@ -79,9 +79,28 @@ export function buildNotificationsForEvents(events: CalendarEvent[], now = new D
 }
 
 const pendingQueue: CalendarNotification[] = [];
+const snoozedUntil = new Map<string, number>();
+
+export function snoozeNotification(id: string, minutes = 5): void {
+  snoozedUntil.set(id, Date.now() + minutes * 60_000);
+}
+
+function pruneSnoozed(): void {
+  const now = Date.now();
+  for (const [id, until] of snoozedUntil) {
+    if (until <= now) snoozedUntil.delete(id);
+  }
+}
+
+function isSnoozed(id: string): boolean {
+  pruneSnoozed();
+  const until = snoozedUntil.get(id);
+  return until !== undefined && until > Date.now();
+}
 
 export function queueNotifications(notifications: CalendarNotification[]): void {
   for (const n of notifications) {
+    if (isSnoozed(n.id)) continue;
     if (!pendingQueue.some((p) => p.id === n.id)) {
       pendingQueue.unshift(n);
     }
@@ -90,7 +109,8 @@ export function queueNotifications(notifications: CalendarNotification[]): void 
 }
 
 export function getPendingNotifications(): CalendarNotification[] {
-  return [...pendingQueue];
+  pruneSnoozed();
+  return pendingQueue.filter((n) => !isSnoozed(n.id));
 }
 
 export function dismissNotification(id: string): void {

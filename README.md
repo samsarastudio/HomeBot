@@ -19,12 +19,15 @@ Then copy `skills/daily-plan` into `~/.openclaw/workspace/skills/` and ensure to
 ## Features
 
 - **Co-located read access** — reads the full `~/.openclaw` state dir (workspace, cron, tasks, config)
-- **Today's plan** — parses `memory/YYYY-MM-DD.md` `## Plan` checkboxes; tap to toggle done
+- **Today's plan** — parses `memory/YYYY-MM-DD.md` `## Plan`; tap row to edit, circle to toggle, swipe gestures on 7" display
+- **Quick capture** — `+` button adds tasks from the touchscreen
+- **7" Freenove layout** — tabbed PLAN/DONE, Now/Next countdown strip, compact info bar
 - **Live Gateway events** — cron overlays, exec/plugin approval Approve/Deny
+- **Calendar events** — ribbon + notification popups with snooze
 - **Fullscreen + Close** — top-left Close button exits the app (returns to Pi desktop)
-- **NEXUS-inspired dark UI** — large touch targets for arm's-length use
+- **NEXUS-inspired dark UI** — large touch targets, night desk dimming after 10 PM
 
-**Planned fixes & roadmap:** [FEATURES.md](FEATURES.md) — compact status bar, task detail popups, image archive, calendar notifications.
+**Full feature spec & history:** [FEATURES.md](FEATURES.md)
 
 ## Development
 
@@ -42,12 +45,18 @@ Open http://localhost:5173 (dev) or http://127.0.0.1:8080 (production build serv
 
 | Endpoint | Description |
 |----------|-------------|
+| `GET /api/health` | Health check |
+| `GET /api/dashboard/data` | Full dashboard payload (plan, events, telemetry) |
 | `GET /api/openclaw/status` | Aggregated snapshot |
 | `GET /api/openclaw/workspace?path=...` | Read workspace file |
 | `GET /api/openclaw/cron` | Cron jobs |
 | `GET /api/openclaw/tasks` | Task ledger |
 | `GET /api/plan` | Today's parsed plan |
-| `PUT /api/plan` | Toggle checkbox `{ index, done }` |
+| `POST /api/plan` | Add task `{ title, description?, time?, dueDate?, category?, important? }` |
+| `PUT /api/plan` | Update task `{ index, done?, time?, dueDate?, category?, important?, title?, description? }` |
+| `DELETE /api/plan/:index` | Remove task by index |
+| `POST /api/plan/defer` | Move task to tomorrow `{ index }` |
+| `POST /api/notifications/snooze` | Snooze notification `{ id, minutes? }` |
 | `POST /api/exit` | Close Chromium kiosk window |
 
 ## Architecture

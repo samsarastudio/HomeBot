@@ -383,6 +383,8 @@ export async function updatePlanItem(
     dueDate?: string | null;
     category?: PlanCategory;
     important?: boolean;
+    title?: string;
+    description?: string | null;
   },
   date = new Date(),
 ): Promise<PlanResponse> {
@@ -420,7 +422,14 @@ export async function updatePlanItem(
       if (updates.time === null) time = undefined;
       else if (updates.time !== undefined) time = updates.time.trim() || undefined;
 
-      const newBody = buildPlanBody(time, parsed.title, parsed.description, tokens);
+      let title = parsed.title;
+      if (updates.title !== undefined) title = updates.title.trim() || parsed.title;
+
+      let description = parsed.description;
+      if (updates.description === null) description = undefined;
+      else if (updates.description !== undefined) description = updates.description.trim() || undefined;
+
+      const newBody = buildPlanBody(time, title, description, tokens);
       lines[i] = `- [${done ? "x" : " "}] ${newBody}`;
       updated = true;
       break;
@@ -436,4 +445,105 @@ export async function updatePlanItem(
 
 export async function togglePlanItem(index: number, done: boolean, date = new Date()): Promise<PlanResponse> {
   return updatePlanItem(index, { done }, date);
+}
+
+function removePlanLineAtIndex(content: string, index: number): { content: string; line: string } | null {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.trim() === PLAN_HEADER);
+  if (start === -1) return null;
+
+  let currentIndex = 0;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.startsWith("## ") && line.trim() !== PLAN_HEADER) break;
+    const match = line.match(CHECKBOX_RE);
+    if (!match) continue;
+
+    if (currentIndex === index) {
+      lines.splice(i, 1);
+      return { content: lines.join("\n"), line: line.trim() };
+    }
+    currentIndex++;
+  }
+
+  return null;
+}
+
+export async function addPlanItem(
+  fields: PlanLineFields & { done?: boolean },
+  date = new Date(),
+): Promise<PlanResponse> {
+  await ensureCarryForward(date);
+  let content = await ensureTodayPlanFile(date);
+  const line = buildPlanLine(
+    {
+      ...fields,
+      addedAt: fields.addedAt ?? new Date().toISOString(),
+    },
+    fields.done ?? false,
+  );
+  content = appendPlanLines(content, [line]);
+  await writeWorkspaceFile(planMemoryPath(date), content);
+  return getPlan(date);
+}
+
+export async function deletePlanItem(index: number, date = new Date()): Promise<PlanResponse> {
+  const path = planMemoryPath(date);
+  const file = await readWorkspaceFile(path);
+  if (!file.exists) throw new Error("Plan file does not exist");
+
+  const removed = removePlanLineAtIndex(file.content, index);
+  if (!removed) throw new Error("Plan item not found");
+
+  await writeWorkspaceFile(path, removed.content);
+  return getPlan(date);
+}
+
+function addDaysYmd(ymd: string, delta: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y!, m! - 1, d! + delta);
+  return todayDateString(dt);
+}
+
+export async function deferPlanItemToTomorrow(index: number, date = new Date()): Promise<PlanResponse> {
+  const path = planMemoryPath(date);
+  const file = await readWorkspaceFile(path);
+  if (!file.exists) throw new Error("Plan file does not exist");
+
+  const todayStr = todayDateString(date);
+  const items = parsePlanSection(file.content, todayStr);
+  const item = items.find((i) => i.index === index);
+  if (!item) throw new Error("Plan item not found");
+  if (item.done) throw new Error("Cannot defer completed item");
+
+  const removed = removePlanLineAtIndex(file.content, index);
+  if (!removed) throw new Error("Plan item not found");
+  await writeWorkspaceFile(path, removed.content);
+
+  const tomorrow = addDaysYmd(todayStr, 1);
+  const tomorrowDate = new Date(
+    Number(tomorrow.slice(0, 4)),
+    Number(tomorrow.slice(5, 7)) - 1,
+    Number(tomorrow.slice(8, 10)),
+  );
+  let tomorrowContent = await ensureTodayPlanFile(tomorrowDate);
+  const deferLine = buildPlanLine(
+    {
+      time: item.time,
+      title: item.title,
+      description: item.description,
+      category: item.category,
+      important: item.important,
+      dueDate: tomorrow,
+      addedAt: item.addedAt ?? new Date().toISOString(),
+      carryFrom: item.carryFrom,
+      image: item.image,
+      attachment: item.attachment,
+    },
+    false,
+  );
+  tomorrowContent = appendPlanLines(tomorrowContent, [deferLine]);
+  await writeWorkspaceFile(planMemoryPath(tomorrowDate), tomorrowContent);
+
+  return getPlan(date);
 }

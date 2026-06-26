@@ -9,7 +9,7 @@ import { buildStatusSnapshot } from "./openclaw/snapshot.js";
 import { readCronJobs } from "./openclaw/cron.js";
 import { readTasks } from "./openclaw/tasks.js";
 import { listWorkspace, readWorkspaceFile } from "./openclaw/workspace.js";
-import { getPlan, updatePlanItem } from "./plan-file.js";
+import { getPlan, updatePlanItem, addPlanItem, deletePlanItem, deferPlanItemToTomorrow } from "./plan-file.js";
 import { buildDashboardData } from "./routes/dashboard.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerMediaRoutes } from "./routes/media.js";
@@ -52,6 +52,10 @@ export async function broadcastDashboard(io: SocketServer): Promise<void> {
 export function createApp(): express.Express {
   const app = express();
   app.use(express.json());
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true, timestamp: new Date().toISOString() });
+  });
 
   app.get("/api/dashboard/data", async (_req, res) => {
     try {
@@ -123,13 +127,15 @@ export function createApp(): express.Express {
 
   app.put("/api/plan", async (req, res) => {
     try {
-      const { index, done, time, dueDate, category, important } = req.body as {
+      const { index, done, time, dueDate, category, important, title, description } = req.body as {
         index?: number;
         done?: boolean;
         time?: string | null;
         dueDate?: string | null;
         category?: "work" | "personal";
         important?: boolean;
+        title?: string;
+        description?: string | null;
       };
       if (typeof index !== "number") {
         res.status(400).json({ error: "index is required" });
@@ -141,17 +147,83 @@ export function createApp(): express.Express {
         dueDate?: string | null;
         category?: "work" | "personal";
         important?: boolean;
+        title?: string;
+        description?: string | null;
       } = {};
       if (typeof done === "boolean") updates.done = done;
       if (time !== undefined) updates.time = time;
       if (dueDate !== undefined) updates.dueDate = dueDate;
       if (category === "work" || category === "personal") updates.category = category;
       if (typeof important === "boolean") updates.important = important;
+      if (title !== undefined) updates.title = title;
+      if (description !== undefined) updates.description = description;
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ error: "no updates provided" });
         return;
       }
       const plan = await updatePlanItem(index, updates);
+      const io = getDashboardIo();
+      if (io) void broadcastDashboard(io);
+      res.json(plan);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post("/api/plan", async (req, res) => {
+    try {
+      const { title, description, time, dueDate, category, important } = req.body as {
+        title?: string;
+        description?: string;
+        time?: string;
+        dueDate?: string;
+        category?: "work" | "personal";
+        important?: boolean;
+      };
+      if (!title?.trim()) {
+        res.status(400).json({ error: "title is required" });
+        return;
+      }
+      const plan = await addPlanItem({
+        title: title.trim(),
+        description: description?.trim(),
+        time: time?.trim(),
+        dueDate: dueDate?.trim(),
+        category: category === "work" ? "work" : "personal",
+        important: Boolean(important),
+      });
+      const io = getDashboardIo();
+      if (io) void broadcastDashboard(io);
+      res.json(plan);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.delete("/api/plan/:index", async (req, res) => {
+    try {
+      const index = Number(req.params.index);
+      if (!Number.isFinite(index)) {
+        res.status(400).json({ error: "invalid index" });
+        return;
+      }
+      const plan = await deletePlanItem(index);
+      const io = getDashboardIo();
+      if (io) void broadcastDashboard(io);
+      res.json(plan);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post("/api/plan/defer", async (req, res) => {
+    try {
+      const { index } = req.body as { index?: number };
+      if (typeof index !== "number") {
+        res.status(400).json({ error: "index is required" });
+        return;
+      }
+      const plan = await deferPlanItemToTomorrow(index);
       const io = getDashboardIo();
       if (io) void broadcastDashboard(io);
       res.json(plan);

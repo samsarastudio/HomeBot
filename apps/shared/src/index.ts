@@ -30,6 +30,17 @@ export interface PlanUpdatePayload {
   dueDate?: string | null;
   category?: PlanCategory;
   important?: boolean;
+  title?: string;
+  description?: string | null;
+}
+
+export interface PlanCreatePayload {
+  title: string;
+  description?: string;
+  time?: string;
+  dueDate?: string;
+  category?: PlanCategory;
+  important?: boolean;
 }
 
 export interface PlanResponse {

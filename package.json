@@ -5,7 +5,8 @@
   "scripts": {
     "build": "pnpm --filter @homebot/shared build && pnpm --filter @homebot/dashboard build && pnpm --filter @homebot/server build",
     "dev": "pnpm --parallel --filter @homebot/dashboard --filter @homebot/server dev",
-    "start": "pnpm --filter @homebot/server start"
+    "start": "pnpm --filter @homebot/server start",
+    "test": "pnpm --filter @homebot/server test && pnpm --filter @homebot/dashboard test"
   },
   "engines": {
     "node": ">=22"

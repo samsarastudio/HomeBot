@@ -78,5 +78,7 @@ exec "$CHROMIUM" \
   --no-default-browser-check \
   --check-for-update-interval=31536000 \
   --overscroll-history-navigation=0 \
+  --touch-events=enabled \
+  --disable-pinch \
   --window-name=HomeBot \
   "$URL"
