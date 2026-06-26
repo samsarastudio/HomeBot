@@ -1320,6 +1320,10 @@ html[data-layout="7in"] .toolbar-compact {
   gap: 6px;
 }
 
+html[data-layout="7in"] .plan-tab-bar {
+  display: none;
+}
+
 html[data-layout="7in"] .filter-bar {
   flex: 1;
   gap: 4px;
@@ -1334,40 +1338,30 @@ html[data-layout="7in"] .filter-chip {
   letter-spacing: 0.05em;
 }
 
-html[data-layout="7in"] .plan-tab-bar {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 4px;
-}
-
-html[data-layout="7in"] .plan-tab {
-  flex: 0 0 auto;
-  min-height: 28px;
-  min-width: 58px;
-  padding: 0 8px;
-  border-radius: 8px;
-  font-size: 0.58rem;
-  letter-spacing: 0.05em;
-}
-
 html[data-layout="7in"] .main-grid {
-  grid-template-columns: 1fr;
-  gap: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
   flex: 1;
   min-height: 0;
 }
 
 html[data-layout="7in"] .panel {
   border-radius: 10px;
+  min-width: 0;
 }
 
 html[data-layout="7in"] .panel-header {
-  padding: 6px 10px;
-  font-size: 0.7rem;
+  padding: 4px 8px;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
 }
 
 html[data-layout="7in"] .panel-body {
-  padding: 4px;
+  padding: 3px;
+}
+
+html[data-layout="7in"] .panel-body::-webkit-scrollbar {
+  width: 8px;
 }
 
 html[data-layout="7in"] .plan-item {
@@ -1418,7 +1412,7 @@ html[data-layout="7in"] .plan-age {
 }
 
 html[data-layout="7in"] .plan-title {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;

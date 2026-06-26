@@ -922,14 +922,14 @@ function updateEventsRibbon(): void {
 }
 
 function updatePlanTabVisibility(): void {
-  const useTabs = is7inLayout();
-  if (pendingPanelEl) pendingPanelEl.classList.toggle("tab-hidden", useTabs && planTab !== "pending");
-  if (donePanelEl) donePanelEl.classList.toggle("tab-hidden", useTabs && planTab !== "done");
-  if (planTabPendingBtn) planTabPendingBtn.classList.toggle("active", planTab === "pending");
-  if (planTabDoneBtn) planTabDoneBtn.classList.toggle("active", planTab === "done");
-  if (pendingHeaderEl) pendingHeaderEl.classList.toggle("hidden", useTabs);
-  if (doneHeaderEl) doneHeaderEl.classList.toggle("hidden", useTabs);
-  mainRoot.classList.toggle("layout-compact", useTabs);
+  const compact = is7inLayout();
+  mainRoot.classList.toggle("layout-compact", compact);
+  const tabBar = planTabPendingBtn?.parentElement;
+  if (tabBar) tabBar.classList.toggle("hidden", compact);
+  if (pendingPanelEl) pendingPanelEl.classList.remove("tab-hidden");
+  if (donePanelEl) donePanelEl.classList.remove("tab-hidden");
+  if (pendingHeaderEl) pendingHeaderEl.classList.remove("hidden");
+  if (doneHeaderEl) doneHeaderEl.classList.remove("hidden");
 }
 
 function updateInfoStrip(): void {
@@ -965,8 +965,13 @@ function updateInfoStrip(): void {
 function updatePanelHeaders(): void {
   const pendingCount = filterItems(dashboard?.todolist.plan.pending ?? []).length;
   const doneCount = filterItems(dashboard?.todolist.plan.done ?? []).length;
-  if (pendingHeaderEl) pendingHeaderEl.textContent = `TODAY'S PLAN (${pendingCount})`;
-  if (doneHeaderEl) doneHeaderEl.textContent = `DONE TODAY (${doneCount})`;
+  if (is7inLayout()) {
+    if (pendingHeaderEl) pendingHeaderEl.textContent = `PLAN (${pendingCount})`;
+    if (doneHeaderEl) doneHeaderEl.textContent = `DONE (${doneCount})`;
+  } else {
+    if (pendingHeaderEl) pendingHeaderEl.textContent = `TODAY'S PLAN (${pendingCount})`;
+    if (doneHeaderEl) doneHeaderEl.textContent = `DONE TODAY (${doneCount})`;
+  }
   if (planTabPendingBtn) planTabPendingBtn.textContent = `PLAN (${pendingCount})`;
   if (planTabDoneBtn) planTabDoneBtn.textContent = `DONE (${doneCount})`;
 }
