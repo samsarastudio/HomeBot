@@ -361,7 +361,7 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
     const body = el("div", "plan-body");
 
     if (itemHasImage(item) || item.attachment) {
-      body.appendChild(thumbForItem(item));
+      if (!is7inLayout()) body.appendChild(thumbForItem(item));
     }
 
     const textWrap = el("div", "plan-text");
@@ -373,7 +373,9 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
       meta.appendChild(el("span", `plan-date${overdue ? " overdue-text" : ""}`, d));
     }
     if (!done && item.important) meta.appendChild(el("span", "plan-badge important", "★"));
-    if (!done && item.category === "work") meta.appendChild(el("span", "plan-badge work", "WORK"));
+    if (!done && item.category === "work") {
+      meta.appendChild(el("span", "plan-badge work", is7inLayout() ? "W" : "WORK"));
+    }
     if (!done && item.carryFrom) {
       const label =
         item.carriedDays === 1
@@ -386,12 +388,22 @@ function renderPlanItems(items: PlanItem[], done: boolean, scrollParent: HTMLEle
       const age = el("span", "plan-age");
       age.dataset.addedAt = addedAt;
       age.textContent = formatAgeMinutes(addedAt);
-      meta.appendChild(age);
+      if (!is7inLayout()) meta.appendChild(age);
     }
     if (meta.childElementCount > 0) textWrap.appendChild(meta);
 
     textWrap.appendChild(el("div", `plan-title${overdue && !done ? " overdue-text" : ""}`, item.title));
-    if (!done && item.description) textWrap.appendChild(el("div", "plan-desc", item.description));
+
+    if (!done && is7inLayout()) {
+      const addedAt = getItemAddedAt(item);
+      const age = el("span", "plan-age");
+      age.dataset.addedAt = addedAt;
+      age.textContent = formatAgeMinutes(addedAt);
+      textWrap.appendChild(age);
+    }
+    if (!done && item.description && !is7inLayout()) {
+      textWrap.appendChild(el("div", "plan-desc", item.description));
+    }
     body.appendChild(textWrap);
 
     bindTapOpen(body, item, scrollParent);
@@ -880,11 +892,11 @@ function updateNowNextStrip(): void {
   const pending = filterItems(dashboard.todolist.plan.pending);
   const next = findNextTimedItem(pending, todayYmd());
   if (!next) {
-    nowNextEl.textContent = "No timed tasks ahead";
-    nowNextEl.classList.add("empty");
+    nowNextEl.textContent = "";
+    nowNextEl.classList.add("empty", "hidden");
     return;
   }
-  nowNextEl.classList.remove("empty");
+  nowNextEl.classList.remove("empty", "hidden");
   nowNextEl.textContent = formatNowNextText(next);
 }
 
@@ -899,9 +911,10 @@ function updateEventsRibbon(): void {
     (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
   );
   if (events.length === 0) {
-    eventsRibbonEl.appendChild(el("span", "events-empty", "No events today"));
+    eventsRibbonEl.classList.add("hidden");
     return;
   }
+  eventsRibbonEl.classList.remove("hidden");
   for (const event of events.slice(0, 6)) {
     const chip = el("span", "event-chip", `${formatEventTime(event.startAt)} ${event.title}`);
     eventsRibbonEl.appendChild(chip);
@@ -914,6 +927,9 @@ function updatePlanTabVisibility(): void {
   if (donePanelEl) donePanelEl.classList.toggle("tab-hidden", useTabs && planTab !== "done");
   if (planTabPendingBtn) planTabPendingBtn.classList.toggle("active", planTab === "pending");
   if (planTabDoneBtn) planTabDoneBtn.classList.toggle("active", planTab === "done");
+  if (pendingHeaderEl) pendingHeaderEl.classList.toggle("hidden", useTabs);
+  if (doneHeaderEl) doneHeaderEl.classList.toggle("hidden", useTabs);
+  mainRoot.classList.toggle("layout-compact", useTabs);
 }
 
 function updateInfoStrip(): void {
@@ -981,10 +997,17 @@ function updatePlanPanels(): void {
   updatePlanTabVisibility();
 }
 
+function filterLabel(f: PlanFilter): string {
+  if (!is7inLayout()) return f === "all" ? "ALL" : f.toUpperCase();
+  if (f === "all") return "ALL";
+  if (f === "personal") return "PER";
+  return "WRK";
+}
+
 function renderFilterBar(): HTMLElement {
   const bar = el("div", "filter-bar");
   for (const f of ["all", "personal", "work"] as const) {
-    const btn = el("button", `filter-chip${planFilter === f ? " active" : ""}`, f === "all" ? "ALL" : f.toUpperCase());
+    const btn = el("button", `filter-chip${planFilter === f ? " active" : ""}`, filterLabel(f));
     btn.type = "button";
     btn.addEventListener("click", () => {
       planFilter = f;
@@ -1064,15 +1087,16 @@ function buildMainShell(): void {
 
   mainRoot.appendChild(topBar);
 
-  nowNextEl = el("div", "now-next-strip empty", "No timed tasks ahead");
+  nowNextEl = el("div", "now-next-strip empty hidden");
   mainRoot.appendChild(nowNextEl);
 
   mainRoot.appendChild(renderInfoStrip());
 
-  eventsRibbonEl = el("div", "events-ribbon");
+  eventsRibbonEl = el("div", "events-ribbon hidden");
   mainRoot.appendChild(eventsRibbonEl);
 
-  mainRoot.appendChild(renderFilterBar());
+  const toolbar = el("div", "toolbar-compact");
+  toolbar.appendChild(renderFilterBar());
 
   const tabBar = el("div", "plan-tab-bar");
   planTabPendingBtn = el("button", "plan-tab active", "PLAN");
@@ -1090,7 +1114,8 @@ function buildMainShell(): void {
     updatePanelHeaders();
   });
   tabBar.append(planTabPendingBtn, planTabDoneBtn);
-  mainRoot.appendChild(tabBar);
+  toolbar.appendChild(tabBar);
+  mainRoot.appendChild(toolbar);
 
   const grid = el("main", "main-grid");
 
@@ -1166,6 +1191,8 @@ function bootstrap(): void {
   initLayoutDetection(() => {
     updatePlanTabVisibility();
     updatePanelHeaders();
+    lastPlanKey = "";
+    updatePlanPanels();
   });
   setupGateway();
   setupClock();
