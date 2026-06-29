@@ -7,6 +7,7 @@ import {
   fetchHaMoods,
   runWarmStartup,
   toggleHaArea,
+  turnOffAllLights,
 } from "./home-api";
 import { showToast } from "./toast";
 
@@ -188,15 +189,16 @@ class HomePanelController {
 function renderMoodBarContent(data: HaMoodsResponse, panel: HomePanelController): HTMLElement {
   const wrap = el("div", "ha-mood-bar-inner");
 
+  const actionsRow = el("div", "ha-scene-actions");
   const startupBtn = el("button", "ha-mood-btn ha-startup-btn", `${data.startup.emoji} ${data.startup.name}`);
   startupBtn.type = "button";
-  startupBtn.title = data.startup.description;
+  startupBtn.title = `${data.startup.description} — uses all lights in your areas`;
   startupBtn.addEventListener("click", () => {
     void (async () => {
       panel.setBusy(true);
       try {
         await runWarmStartup();
-        showToast("Warm welcome sequence started");
+        showToast("Warm welcome started");
         void panel.refreshAfterStartup();
       } catch (err) {
         showToast(String(err), "error");
@@ -205,7 +207,27 @@ function renderMoodBarContent(data: HaMoodsResponse, panel: HomePanelController)
       }
     })();
   });
-  wrap.appendChild(startupBtn);
+  actionsRow.appendChild(startupBtn);
+
+  const allOffBtn = el("button", "ha-mood-btn ha-all-off-btn", "🌙 All Off");
+  allOffBtn.type = "button";
+  allOffBtn.title = "Turn off every light in all areas";
+  allOffBtn.addEventListener("click", () => {
+    void (async () => {
+      panel.setBusy(true);
+      try {
+        const result = await turnOffAllLights();
+        showToast(result.count > 0 ? `${result.count} lights off` : "All lights off");
+        await panel.refreshAfterAction();
+      } catch (err) {
+        showToast(String(err), "error");
+      } finally {
+        panel.setBusy(false);
+      }
+    })();
+  });
+  actionsRow.appendChild(allOffBtn);
+  wrap.appendChild(actionsRow);
 
   const moodsRow = el("div", "ha-mood-row");
   for (const mood of data.moods) {

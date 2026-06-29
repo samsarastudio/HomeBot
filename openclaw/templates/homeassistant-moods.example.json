@@ -25,8 +25,8 @@
       "id": "party",
       "name": "Party",
       "emoji": "🎉",
-      "description": "WiZ Party effect",
-      "data": { "brightness_pct": 100, "effect": "Party", "transition": 1 }
+      "description": "Random bold color per room",
+      "data": { "brightness_pct": 100, "transition": 1 }
     },
     {
       "id": "candle",

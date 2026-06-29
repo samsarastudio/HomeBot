@@ -16,10 +16,9 @@ export const DEFAULT_MOODS: HaMood[] = [
     id: "party",
     name: "Party",
     emoji: "🎉",
-    description: "WiZ Party effect, full brightness",
+    description: "Random bold color per room — all lights in each area match",
     data: {
       brightness_pct: 100,
-      effect: "Party",
       transition: 1,
     },
   },
@@ -81,6 +80,28 @@ export function areaSortKey(name: string, order: string[]): number {
   const normalized = name.toLowerCase().replace(/\s+/g, "");
   const idx = order.findIndex((o) => normalized.includes(o) || o.includes(normalized));
   return idx >= 0 ? idx : 999;
+}
+
+export const PARTY_COLORS: [number, number, number][] = [
+  [255, 0, 128],
+  [0, 200, 255],
+  [255, 220, 0],
+  [140, 0, 255],
+  [0, 255, 120],
+  [255, 60, 60],
+  [255, 140, 0],
+  [80, 120, 255],
+  [255, 105, 180],
+  [0, 255, 200],
+];
+
+export function pickPartyColors(count: number): [number, number, number][] {
+  const pool = [...PARTY_COLORS].sort(() => Math.random() - 0.5);
+  const out: [number, number, number][] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(pool[i % pool.length]!);
+  }
+  return out;
 }
 
 function sleep(ms: number): Promise<void> {

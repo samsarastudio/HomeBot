@@ -1,7 +1,7 @@
 import type { Request, Response, Router } from "express";
 import { callHaService, fetchHaAreas, toggleHaArea } from "../homeassistant/areas.js";
 import { fetchHaHealth } from "../homeassistant/health.js";
-import { applyMood, listMoods, runWarmStartup } from "../homeassistant/moods.js";
+import { applyMood, listMoods, runWarmStartup, turnOffAllManagedLights } from "../homeassistant/moods.js";
 import { getHaConfig, haPing } from "../homeassistant/client.js";
 
 function parseAreaAction(action: unknown): "on" | "off" | "toggle" | undefined {
@@ -102,5 +102,14 @@ export function registerHomeAssistantRoutes(router: Router): void {
   router.post("/startup/warm", (_req, res) => {
     void runWarmStartup().catch(() => {});
     res.json({ ok: true, started: true, sequence: "warm-welcome" });
+  });
+
+  router.post("/lights/all/off", async (_req, res) => {
+    try {
+      const result = await turnOffAllManagedLights();
+      res.json({ ok: true, entity_ids: result.entity_ids, count: result.entity_ids.length });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
   });
 }

@@ -7,6 +7,7 @@ import {
   areaSortKey,
   getMoodById,
   moodSleep,
+  pickPartyColors,
 } from "./mood-presets.js";
 
 export interface LightTarget {
@@ -15,15 +16,26 @@ export interface LightTarget {
   all_lights?: boolean;
 }
 
-async function collectLightEntityIds(): Promise<string[]> {
+export interface ManagedAreaLights {
+  area_id: string;
+  area_name: string;
+  entity_ids: string[];
+}
+
+export async function getManagedLightsByArea(): Promise<ManagedAreaLights[]> {
   const data = await fetchHaAreas();
-  const ids = new Set<string>();
-  for (const area of data.areas) {
-    for (const ent of area.entities) {
-      if (ent.domain === "light") ids.add(ent.entity_id);
-    }
-  }
-  return [...ids];
+  return data.areas
+    .map((area) => ({
+      area_id: area.id,
+      area_name: area.name,
+      entity_ids: area.entities.filter((e) => e.domain === "light").map((e) => e.entity_id),
+    }))
+    .filter((a) => a.entity_ids.length > 0);
+}
+
+export async function getManagedLightIds(): Promise<string[]> {
+  const byArea = await getManagedLightsByArea();
+  return byArea.flatMap((a) => a.entity_ids);
 }
 
 async function resolveLightTarget(target: LightTarget): Promise<string[]> {
@@ -31,12 +43,10 @@ async function resolveLightTarget(target: LightTarget): Promise<string[]> {
     return target.entity_ids.filter((id) => id.startsWith("light."));
   }
   if (target.area_id) {
-    const data = await fetchHaAreas();
-    const area = data.areas.find((a) => a.id === target.area_id);
-    return area?.entities.filter((e) => e.domain === "light").map((e) => e.entity_id) ?? [];
+    const byArea = await getManagedLightsByArea();
+    return byArea.find((a) => a.area_id === target.area_id)?.entity_ids ?? [];
   }
-  if (target.all_lights) return collectLightEntityIds();
-  return collectLightEntityIds();
+  return getManagedLightIds();
 }
 
 export async function applyLightScene(
@@ -65,19 +75,65 @@ export async function applyLightScene(
   return { entity_ids };
 }
 
+async function applyPartyMode(target: LightTarget): Promise<{ entity_ids: string[] }> {
+  const byArea = await getManagedLightsByArea();
+  if (byArea.length === 0) throw new Error("No managed lights found");
+
+  if (target.entity_ids?.length === 1) {
+    const rgb = pickPartyColors(1)[0]!;
+    return applyLightScene({ entity_ids: target.entity_ids }, {
+      brightness_pct: 100,
+      rgb_color: rgb,
+      transition: 1,
+    });
+  }
+
+  if (target.area_id) {
+    const area = byArea.find((a) => a.area_id === target.area_id);
+    if (!area?.entity_ids.length) throw new Error("No lights in this area");
+    const rgb = pickPartyColors(1)[0]!;
+    return applyLightScene({ entity_ids: area.entity_ids }, {
+      brightness_pct: 100,
+      rgb_color: rgb,
+      transition: 1,
+    });
+  }
+
+  const colors = pickPartyColors(byArea.length);
+  const allIds: string[] = [];
+  for (let i = 0; i < byArea.length; i++) {
+    const area = byArea[i]!;
+    const rgb = colors[i]!;
+    await applyLightScene({ entity_ids: area.entity_ids }, {
+      brightness_pct: 100,
+      rgb_color: rgb,
+      transition: 1,
+    });
+    allIds.push(...area.entity_ids);
+  }
+  return { entity_ids: allIds };
+}
+
 export async function applyMood(
   moodId: string,
   target: LightTarget = { all_lights: true },
 ): Promise<{ mood_id: string; entity_ids: string[] }> {
+  if (moodId === "party") {
+    const result = await applyPartyMode(target);
+    return { mood_id: moodId, entity_ids: result.entity_ids };
+  }
+
   const mood = getMoodById(moodId);
   if (!mood) throw new Error(`Unknown mood: ${moodId}`);
   const result = await applyLightScene(target, mood.data);
   return { mood_id: moodId, entity_ids: result.entity_ids };
 }
 
-export async function turnOffLights(target: LightTarget = { all_lights: true }): Promise<void> {
+export async function turnOffLights(target: LightTarget): Promise<{ entity_ids: string[] }> {
   const entity_ids = await resolveLightTarget(target);
-  if (entity_ids.length === 0) return;
+  if (entity_ids.length === 0) {
+    throw new Error("No lights found for this target");
+  }
 
   const payload =
     entity_ids.length === 1
@@ -91,34 +147,36 @@ export async function turnOffLights(target: LightTarget = { all_lights: true }):
   if (!res.ok) {
     throw new Error((await res.text()) || `Light off failed (${res.status})`);
   }
+  return { entity_ids };
+}
+
+export async function turnOffAllManagedLights(): Promise<{ entity_ids: string[] }> {
+  const entity_ids = await getManagedLightIds();
+  if (entity_ids.length === 0) throw new Error("No managed lights found in areas");
+  return turnOffLights({ entity_ids });
 }
 
 export async function runWarmStartup(sequence: HaStartupSequence = WARM_STARTUP): Promise<void> {
-  const data = await fetchHaAreas();
-  const areasWithLights = data.areas
-    .map((area) => ({
-      area,
-      lights: area.entities.filter((e) => e.domain === "light").map((e) => e.entity_id),
-    }))
-    .filter((a) => a.lights.length > 0)
-    .sort(
-      (a, b) =>
-        areaSortKey(a.area.name, sequence.area_order) -
-        areaSortKey(b.area.name, sequence.area_order),
-    );
-
-  if (areasWithLights.length === 0) {
-    throw new Error("No lights available for startup sequence");
+  const byArea = await getManagedLightsByArea();
+  if (byArea.length === 0) {
+    throw new Error("No managed lights available for startup sequence");
   }
 
-  await turnOffLights({ all_lights: true });
+  const areasWithLights = [...byArea].sort(
+    (a, b) =>
+      areaSortKey(a.area_name, sequence.area_order) -
+      areaSortKey(b.area_name, sequence.area_order),
+  );
+
+  const allManagedIds = areasWithLights.flatMap((a) => a.entity_ids);
+  await turnOffLights({ entity_ids: allManagedIds });
   await moodSleep(400);
 
   const [firstStep, ...rampSteps] = sequence.steps;
   if (!firstStep) return;
 
   for (let i = 0; i < areasWithLights.length; i++) {
-    const { lights } = areasWithLights[i]!;
+    const { entity_ids: lights } = areasWithLights[i]!;
     await moodSleep(i * 500);
     await applyLightScene({ entity_ids: lights }, {
       brightness_pct: firstStep.brightness_pct,
@@ -129,8 +187,7 @@ export async function runWarmStartup(sequence: HaStartupSequence = WARM_STARTUP)
 
   for (const step of rampSteps) {
     if (step.delay_ms) await moodSleep(step.delay_ms);
-    const allLights = areasWithLights.flatMap((a) => a.lights);
-    await applyLightScene({ entity_ids: allLights }, {
+    await applyLightScene({ entity_ids: allManagedIds }, {
       brightness_pct: step.brightness_pct,
       color_temp_kelvin: step.color_temp_kelvin,
       rgb_color: step.rgb_color,

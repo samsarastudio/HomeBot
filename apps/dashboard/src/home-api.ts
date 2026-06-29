@@ -24,6 +24,16 @@ export async function applyHaMood(
   }
 }
 
+export async function turnOffAllLights(): Promise<{ count: number }> {
+  const res = await fetch("/api/homeassistant/lights/all/off", { method: "POST" });
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to turn off all lights");
+  }
+  const data = (await res.json()) as { count?: number };
+  return { count: data.count ?? 0 };
+}
+
 export async function runWarmStartup(): Promise<void> {
   const res = await fetch("/api/homeassistant/startup/warm", { method: "POST" });
   if (!res.ok) {
