@@ -237,3 +237,38 @@ export interface HaHealthResponse {
   error?: string;
   timestamp: string;
 }
+
+export interface HaLightSceneData {
+  brightness_pct?: number;
+  color_temp_kelvin?: number;
+  rgb_color?: [number, number, number];
+  rgbw_color?: [number, number, number, number];
+  effect?: string;
+  transition?: number;
+}
+
+export interface HaMood {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  data: HaLightSceneData;
+}
+
+export interface HaStartupStep extends HaLightSceneData {
+  delay_ms?: number;
+}
+
+export interface HaStartupSequence {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  area_order: string[];
+  steps: HaStartupStep[];
+}
+
+export interface HaMoodsResponse {
+  moods: HaMood[];
+  startup: HaStartupSequence;
+}

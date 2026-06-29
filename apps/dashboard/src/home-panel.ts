@@ -1,10 +1,25 @@
-import type { HaArea, HaAreasResponse, HaHealthResponse } from "@homebot/shared";
-import { callHaService, fetchHaAreas, fetchHaHealth, toggleHaArea } from "./home-api";
+import type { HaArea, HaAreasResponse, HaHealthResponse, HaMood, HaMoodsResponse } from "@homebot/shared";
+import {
+  applyHaMood,
+  callHaService,
+  fetchHaAreas,
+  fetchHaHealth,
+  fetchHaMoods,
+  runWarmStartup,
+  toggleHaArea,
+} from "./home-api";
 import { showToast } from "./toast";
 
 const POLL_MS = 8_000;
 const POST_ACTION_REFRESH_MS = 450;
 const POST_ACTION_RETRY_MS = 1_500;
+const STARTUP_REFRESH_MS = [2000, 5000, 9000];
+
+const LIGHT_QUICK_MOODS: Array<{ id: string; label: string }> = [
+  { id: "cozy", label: "Warm" },
+  { id: "candle", label: "Candle" },
+  { id: "party", label: "Party" },
+];
 
 interface ReloadOptions {
   silent?: boolean;
@@ -69,11 +84,37 @@ function renderHealthStrip(health: HaHealthResponse): HTMLElement {
 class HomePanelController {
   private pollTimer = 0;
   private reloadQueue: Promise<void> = Promise.resolve();
+  private moods: HaMoodsResponse | null = null;
+  private busy = false;
 
   constructor(
     private readonly scroll: HTMLElement,
     private readonly refreshBtn: HTMLButtonElement,
+    private readonly moodBar: HTMLElement,
   ) {}
+
+  setBusy(on: boolean): void {
+    this.busy = on;
+    this.moodBar.querySelectorAll("button").forEach((btn) => {
+      (btn as HTMLButtonElement).disabled = on;
+    });
+  }
+
+  async ensureMoods(): Promise<HaMoodsResponse> {
+    if (!this.moods) this.moods = await fetchHaMoods();
+    return this.moods;
+  }
+
+  renderMoodBar(): void {
+    void this.ensureMoods()
+      .then((data) => {
+        this.moodBar.replaceChildren();
+        this.moodBar.appendChild(renderMoodBarContent(data, this));
+      })
+      .catch((err) => {
+        this.moodBar.replaceChildren(el("div", "ha-mood-error", String(err)));
+      });
+  }
 
   startPolling(): void {
     this.stopPolling();
@@ -97,6 +138,13 @@ class HomePanelController {
     await this.reload({ silent: true });
     await delay(POST_ACTION_RETRY_MS);
     await this.reload({ silent: true });
+  }
+
+  async refreshAfterStartup(): Promise<void> {
+    for (const ms of STARTUP_REFRESH_MS) {
+      await delay(ms);
+      await this.reload({ silent: true });
+    }
   }
 
   private async reloadNow(options: ReloadOptions): Promise<void> {
@@ -137,7 +185,59 @@ class HomePanelController {
   }
 }
 
+function renderMoodBarContent(data: HaMoodsResponse, panel: HomePanelController): HTMLElement {
+  const wrap = el("div", "ha-mood-bar-inner");
+
+  const startupBtn = el("button", "ha-mood-btn ha-startup-btn", `${data.startup.emoji} ${data.startup.name}`);
+  startupBtn.type = "button";
+  startupBtn.title = data.startup.description;
+  startupBtn.addEventListener("click", () => {
+    void (async () => {
+      panel.setBusy(true);
+      try {
+        await runWarmStartup();
+        showToast("Warm welcome sequence started");
+        void panel.refreshAfterStartup();
+      } catch (err) {
+        showToast(String(err), "error");
+      } finally {
+        panel.setBusy(false);
+      }
+    })();
+  });
+  wrap.appendChild(startupBtn);
+
+  const moodsRow = el("div", "ha-mood-row");
+  for (const mood of data.moods) {
+    moodsRow.appendChild(renderMoodButton(mood, panel));
+  }
+  wrap.appendChild(moodsRow);
+  return wrap;
+}
+
+function renderMoodButton(mood: HaMood, panel: HomePanelController): HTMLElement {
+  const btn = el("button", "ha-mood-btn", `${mood.emoji} ${mood.name}`);
+  btn.type = "button";
+  btn.title = mood.description;
+  btn.addEventListener("click", () => {
+    void (async () => {
+      panel.setBusy(true);
+      try {
+        await applyHaMood(mood.id);
+        showToast(`${mood.name} mood applied`);
+        await panel.refreshAfterAction();
+      } catch (err) {
+        showToast(String(err), "error");
+      } finally {
+        panel.setBusy(false);
+      }
+    })();
+  });
+  return btn;
+}
+
 function renderEntityRow(entity: HaArea["entities"][number], panel: HomePanelController): HTMLElement {
+  const block = el("div", "ha-entity-block");
   const row = el("div", `ha-entity-row${entity.on ? " on" : ""}`);
   const label = el("span", "ha-entity-name", entity.name);
   const toggle = el("button", `ha-toggle${entity.on ? " active" : ""}`, entity.on ? "ON" : "OFF");
@@ -158,7 +258,31 @@ function renderEntityRow(entity: HaArea["entities"][number], panel: HomePanelCon
     }
   });
   row.append(label, toggle);
-  return row;
+  block.appendChild(row);
+
+  if (entity.domain === "light") {
+    const quick = el("div", "ha-light-quick");
+    for (const preset of LIGHT_QUICK_MOODS) {
+      const chip = el("button", "ha-light-chip", preset.label);
+      chip.type = "button";
+      chip.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        chip.disabled = true;
+        try {
+          await applyHaMood(preset.id, { entity_id: entity.entity_id });
+          await panel.refreshAfterAction();
+        } catch (err) {
+          showToast(String(err), "error");
+        } finally {
+          chip.disabled = false;
+        }
+      });
+      quick.appendChild(chip);
+    }
+    block.appendChild(quick);
+  }
+
+  return block;
 }
 
 function renderArea(area: HaArea, panel: HomePanelController): HTMLElement {
@@ -261,6 +385,10 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   healthStrip.appendChild(el("div", "ha-health-summary", "Checking Home Assistant…"));
   card.appendChild(healthStrip);
 
+  const moodBar = el("div", "ha-mood-bar");
+  moodBar.appendChild(el("div", "ha-health-summary", "Loading moods…"));
+  card.appendChild(moodBar);
+
   const scroll = el("div", "home-panel-scroll");
   scroll.appendChild(el("p", "ha-status-msg", "Loading…"));
   card.appendChild(scroll);
@@ -271,7 +399,7 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   actions.appendChild(refreshBtn);
   card.appendChild(actions);
 
-  const panel = new HomePanelController(scroll, refreshBtn);
+  const panel = new HomePanelController(scroll, refreshBtn, moodBar);
 
   const handleClose = () => {
     panel.stopPolling();
@@ -290,6 +418,7 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   backdrop.appendChild(card);
 
   void panel.reload().then(() => {
+    panel.renderMoodBar();
     panel.startPolling();
   });
 

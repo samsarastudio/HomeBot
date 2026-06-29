@@ -1,6 +1,7 @@
 import type { Request, Response, Router } from "express";
 import { callHaService, fetchHaAreas, toggleHaArea } from "../homeassistant/areas.js";
 import { fetchHaHealth } from "../homeassistant/health.js";
+import { applyMood, listMoods, runWarmStartup } from "../homeassistant/moods.js";
 import { getHaConfig, haPing } from "../homeassistant/client.js";
 
 function parseAreaAction(action: unknown): "on" | "off" | "toggle" | undefined {
@@ -73,4 +74,33 @@ export function registerHomeAssistantRoutes(router: Router): void {
   router.post("/areas/:areaId/on", (req, res) => void handleAreaAction(req, res, "on"));
   router.post("/areas/:areaId/off", (req, res) => void handleAreaAction(req, res, "off"));
   router.post("/areas/:areaId/service", (req, res) => void handleAreaAction(req, res));
+
+  router.get("/moods", (_req, res) => {
+    res.json(listMoods());
+  });
+
+  router.post("/moods/:moodId/apply", async (req, res) => {
+    const moodId = (Array.isArray(req.params.moodId) ? req.params.moodId[0] : req.params.moodId)?.trim();
+    if (!moodId) {
+      res.status(400).json({ error: "moodId required" });
+      return;
+    }
+    const { entity_id, area_id } = req.body as { entity_id?: string; area_id?: string };
+    try {
+      const target = entity_id
+        ? { entity_ids: [entity_id.trim()] }
+        : area_id
+          ? { area_id: area_id.trim() }
+          : { all_lights: true };
+      const result = await applyMood(moodId, target);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  router.post("/startup/warm", (_req, res) => {
+    void runWarmStartup().catch(() => {});
+    res.json({ ok: true, started: true, sequence: "warm-welcome" });
+  });
 }

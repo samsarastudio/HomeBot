@@ -1,4 +1,36 @@
-import type { HaAreaToggleResponse, HaAreasResponse, HaHealthResponse } from "@homebot/shared";
+import type { HaAreaToggleResponse, HaAreasResponse, HaHealthResponse, HaMoodsResponse } from "@homebot/shared";
+
+export async function fetchHaMoods(): Promise<HaMoodsResponse> {
+  const res = await fetch("/api/homeassistant/moods");
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to load moods");
+  }
+  return res.json() as Promise<HaMoodsResponse>;
+}
+
+export async function applyHaMood(
+  moodId: string,
+  target?: { entity_id?: string; area_id?: string },
+): Promise<void> {
+  const res = await fetch(`/api/homeassistant/moods/${encodeURIComponent(moodId)}/apply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(target ?? {}),
+  });
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to apply mood");
+  }
+}
+
+export async function runWarmStartup(): Promise<void> {
+  const res = await fetch("/api/homeassistant/startup/warm", { method: "POST" });
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to start warm sequence");
+  }
+}
 
 export async function fetchHaHealth(): Promise<HaHealthResponse> {
   const res = await fetch("/api/homeassistant/health");

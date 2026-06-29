@@ -800,6 +800,100 @@ body {
   word-break: break-word;
 }
 
+.ha-mood-bar {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(168, 85, 247, 0.06);
+}
+
+.ha-mood-bar-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ha-mood-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ha-mood-btn {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ha-mood-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ha-mood-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.ha-startup-btn {
+  width: 100%;
+  min-height: 42px;
+  border-color: rgba(251, 191, 36, 0.45);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.15), rgba(255, 120, 40, 0.12));
+  color: #fbbf24;
+  font-size: 0.68rem;
+}
+
+.ha-mood-error {
+  font-size: 0.7rem;
+  color: var(--danger);
+}
+
+.ha-entity-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ha-light-quick {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px 4px 8px;
+  flex-wrap: wrap;
+}
+
+.ha-light-chip {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--accent-pink);
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.ha-light-chip:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ha-light-chip:disabled {
+  opacity: 0.5;
+}
+
 .home-panel-close {
   width: 32px;
   height: 32px;
@@ -1650,6 +1744,27 @@ html[data-layout="7in"] .ha-health-chip {
 
 html[data-layout="7in"] .ha-health-summary {
   font-size: 0.64rem;
+}
+
+html[data-layout="7in"] .ha-mood-bar {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+html[data-layout="7in"] .ha-mood-btn {
+  min-height: 34px;
+  font-size: 0.56rem;
+  padding: 4px 8px;
+}
+
+html[data-layout="7in"] .ha-startup-btn {
+  min-height: 36px;
+  font-size: 0.6rem;
+}
+
+html[data-layout="7in"] .ha-light-chip {
+  min-height: 26px;
+  font-size: 0.52rem;
 }
 
 html[data-layout="7in"] .home-panel-scroll {

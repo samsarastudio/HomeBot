@@ -1,0 +1,53 @@
+{
+  "_comment": "Optional mood overrides — copy to ~/.openclaw/workspace/homeassistant-moods.json (future)",
+  "startup": {
+    "id": "warm-welcome",
+    "name": "Warm Welcome",
+    "emoji": "🌅",
+    "description": "Staggered warm sunrise through each room",
+    "area_order": ["entry", "dining", "kitchen", "living", "office", "bedroom"],
+    "steps": [
+      { "brightness_pct": 8, "color_temp_kelvin": 2200, "transition": 0 },
+      { "brightness_pct": 28, "color_temp_kelvin": 2500, "transition": 2.5, "delay_ms": 700 },
+      { "brightness_pct": 52, "color_temp_kelvin": 2700, "transition": 4, "delay_ms": 1600 },
+      { "brightness_pct": 70, "color_temp_kelvin": 2800, "transition": 5, "delay_ms": 2800 }
+    ]
+  },
+  "moods": [
+    {
+      "id": "bar",
+      "name": "Bar",
+      "emoji": "🍸",
+      "description": "Dim amber pub glow",
+      "data": { "brightness_pct": 38, "rgb_color": [255, 120, 40], "transition": 2 }
+    },
+    {
+      "id": "party",
+      "name": "Party",
+      "emoji": "🎉",
+      "description": "WiZ Party effect",
+      "data": { "brightness_pct": 100, "effect": "Party", "transition": 1 }
+    },
+    {
+      "id": "candle",
+      "name": "Candle",
+      "emoji": "🕯️",
+      "description": "Candlelight flicker",
+      "data": { "brightness_pct": 42, "effect": "Candlelight", "transition": 2 }
+    },
+    {
+      "id": "cozy",
+      "name": "Cozy",
+      "emoji": "🛋️",
+      "description": "Warm evening relax",
+      "data": { "brightness_pct": 48, "color_temp_kelvin": 2700, "effect": "Cozy", "transition": 3 }
+    },
+    {
+      "id": "ocean",
+      "name": "Ocean",
+      "emoji": "🌊",
+      "description": "Cool calm blues",
+      "data": { "brightness_pct": 55, "effect": "Ocean", "transition": 2 }
+    }
+  ]
+}
