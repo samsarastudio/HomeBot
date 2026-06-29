@@ -14,6 +14,7 @@ import { buildDashboardData } from "./routes/dashboard.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerMediaRoutes } from "./routes/media.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerHomeAssistantRoutes } from "./routes/homeassistant.js";
 import { getUploadsRoot } from "./uploads.js";
 import { tickEventScheduler } from "./events/scheduler.js";
 import { runArchive, getArchiveStatus } from "./media/archive.js";
@@ -76,6 +77,10 @@ export function createApp(): express.Express {
   const notificationsRouter = express.Router();
   registerNotificationRoutes(notificationsRouter);
   app.use("/api/notifications", notificationsRouter);
+
+  const haRouter = express.Router();
+  registerHomeAssistantRoutes(haRouter);
+  app.use("/api/homeassistant", haRouter);
 
   app.get("/api/openclaw/status", async (_req, res) => {
     try {

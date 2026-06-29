@@ -180,3 +180,31 @@ export interface DashboardData {
   openclaw: OpenClawStatus;
   timestamp: string;
 }
+
+export interface HaEntity {
+  entity_id: string;
+  name: string;
+  domain: string;
+  state: string;
+  on: boolean;
+}
+
+export interface HaArea {
+  id: string;
+  name: string;
+  entities: HaEntity[];
+}
+
+export interface HaAreasResponse {
+  configured: boolean;
+  reachable: boolean;
+  areas: HaArea[];
+  error?: string;
+}
+
+export interface HaAreaToggleResponse {
+  ok: true;
+  area_id: string;
+  action: "on" | "off";
+  entity_ids: string[];
+}

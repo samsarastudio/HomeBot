@@ -1,0 +1,20 @@
+{
+  "areas": [
+    {
+      "id": "living-room",
+      "name": "Living Room",
+      "entities": [
+        "light.living_room",
+        "switch.living_room_lamp"
+      ]
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "entities": [
+        "light.bedroom",
+        "fan.bedroom"
+      ]
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import { formatClock, formatDate, getGreeting } from "./utils/time";
 import { formatAgeMinutes, isItemOverdue, sortPlanItems } from "./plan-utils";
 import { createTouchCalendarPicker, createTouchClockPicker } from "./touch-pickers";
 import { showToast } from "./toast";
+import { renderHomePanel } from "./home-panel";
 import "./styles/nexus.css";
 
 interface CronPrompt {
@@ -42,6 +43,7 @@ let planTab: "pending" | "done" = "pending";
 let apiOnline = true;
 let infoStripExpanded = false;
 let captureOpen = false;
+let homeOpen = false;
 let focusItem: PlanItem | null = null;
 let notificationQueue: CalendarNotification[] = [];
 let lastOverlayKey = "";
@@ -845,6 +847,7 @@ function renderFocusOverlay(): HTMLElement | null {
 function overlayKey(): string {
   if (focusItem) return `focus:${focusItem.index}`;
   if (captureOpen) return "capture";
+  if (homeOpen) return "home";
   if (approval) return `approval:${approval.requestId}`;
   if (activeNotification) return `notif:${activeNotification.id}`;
   if (detailItem) return `detail:${detailItem.index}`;
@@ -859,6 +862,10 @@ function buildOverlay(): HTMLElement | null {
     renderNotificationOverlay() ??
     renderFocusOverlay() ??
     renderQuickCaptureOverlay() ??
+    (homeOpen ? renderHomePanel(() => {
+      homeOpen = false;
+      renderOverlay(true);
+    }) : null) ??
     (detailItem ? renderDetailOverlay() : null) ??
     renderCronOverlay()
   );
@@ -1072,10 +1079,20 @@ function buildMainShell(): void {
   mainRoot.appendChild(offlineBannerEl);
 
   const topBar = el("header", "top-bar");
+  const topLeft = el("div", "top-bar-left");
   const closeBtn = el("button", "close-btn", "✕");
   closeBtn.type = "button";
   closeBtn.addEventListener("click", () => void exitApp());
-  topBar.appendChild(closeBtn);
+  const homeBtn = el("button", "home-btn", "⌂");
+  homeBtn.type = "button";
+  homeBtn.title = "Home controls";
+  homeBtn.setAttribute("aria-label", "Home controls");
+  homeBtn.addEventListener("click", () => {
+    homeOpen = true;
+    renderOverlay(true);
+  });
+  topLeft.append(closeBtn, homeBtn);
+  topBar.appendChild(topLeft);
 
   const center = el("div", "header-center");
   const greeting = el("div", "greeting", getGreeting());
