@@ -1,5 +1,5 @@
-import type { HaArea, HaAreasResponse, HaEntity } from "@homebot/shared";
-import { callHaService, fetchHaAreas, toggleHaArea } from "./home-api";
+import type { HaArea, HaAreasResponse, HaHealthResponse } from "@homebot/shared";
+import { callHaService, fetchHaAreas, fetchHaHealth, toggleHaArea } from "./home-api";
 import { showToast } from "./toast";
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -21,7 +21,40 @@ function areaStateLabel(area: HaArea): "OFF" | "ON" | "MIXED" {
   return "MIXED";
 }
 
-function renderEntityRow(entity: HaEntity, scroll: HTMLElement): HTMLElement {
+function renderHealthStrip(health: HaHealthResponse): HTMLElement {
+  const strip = el("div", `ha-health-strip${health.ok ? " ok" : " fail"}`);
+
+  const chips = el("div", "ha-health-chips");
+  for (const item of health.checks) {
+    const chip = el("span", `ha-health-chip${item.ok ? " ok" : " fail"}`, item.label.toUpperCase());
+    if (item.detail) chip.title = item.detail;
+    chips.appendChild(chip);
+  }
+  strip.appendChild(chips);
+
+  const summary = el(
+    "div",
+    "ha-health-summary",
+    `${health.url} · ${health.devices_in_areas} devices · ${health.areas_with_devices} areas`,
+  );
+  strip.appendChild(summary);
+
+  const failed = health.checks.filter((c) => !c.ok);
+  if (failed.length > 0 || health.error) {
+    const detail = el("div", "ha-health-detail");
+    for (const item of failed) {
+      detail.appendChild(el("div", "ha-health-line", `${item.label}: ${item.detail ?? "failed"}`));
+    }
+    if (health.error && !failed.some((f) => f.detail === health.error)) {
+      detail.appendChild(el("div", "ha-health-line", health.error));
+    }
+    strip.appendChild(detail);
+  }
+
+  return strip;
+}
+
+function renderEntityRow(entity: HaArea["entities"][number], scroll: HTMLElement): HTMLElement {
   const row = el("div", `ha-entity-row${entity.on ? " on" : ""}`);
   const label = el("span", "ha-entity-name", entity.name);
   const toggle = el("button", `ha-toggle${entity.on ? " active" : ""}`, entity.on ? "ON" : "OFF");
@@ -33,8 +66,7 @@ function renderEntityRow(entity: HaEntity, scroll: HTMLElement): HTMLElement {
     toggle.disabled = true;
     try {
       await callHaService(entity.entity_id, "toggle");
-      const data = await fetchHaAreas();
-      renderHomeBody(data, scroll);
+      await reloadPanel(scroll);
     } catch (err) {
       showToast(String(err), "error");
     } finally {
@@ -76,8 +108,7 @@ function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
     header.disabled = true;
     try {
       await toggleHaArea(area.id, "toggle");
-      const data = await fetchHaAreas();
-      renderHomeBody(data, scroll);
+      await reloadPanel(scroll);
     } catch (err) {
       showToast(String(err), "error");
     } finally {
@@ -115,7 +146,7 @@ function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
       el(
         "p",
         "ha-status-msg",
-        "No controllable devices found. Assign lights and switches to areas in Home Assistant.",
+        "No controllable devices found. Check the health strip above — assign lights and switches to areas in Home Assistant.",
       ),
     );
     return;
@@ -141,6 +172,10 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   header.appendChild(closeBtn);
   card.appendChild(header);
 
+  const healthStrip = el("div", "ha-health-strip loading");
+  healthStrip.appendChild(el("div", "ha-health-summary", "Checking Home Assistant…"));
+  card.appendChild(healthStrip);
+
   const scroll = el("div", "home-panel-scroll");
   scroll.appendChild(el("p", "ha-status-msg", "Loading…"));
   card.appendChild(scroll);
@@ -149,25 +184,47 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   const refreshBtn = el("button", "btn btn-dismiss", "REFRESH");
   refreshBtn.type = "button";
   refreshBtn.addEventListener("click", () => {
-    void loadAreas(scroll, refreshBtn);
+    void reloadPanel(scroll, healthStrip, refreshBtn);
   });
   actions.appendChild(refreshBtn);
   card.appendChild(actions);
 
   backdrop.appendChild(card);
-  void loadAreas(scroll, refreshBtn);
+  void reloadPanel(scroll, healthStrip, refreshBtn);
   return backdrop;
 }
 
-async function loadAreas(scroll: HTMLElement, refreshBtn: HTMLButtonElement): Promise<void> {
-  refreshBtn.disabled = true;
+async function reloadPanel(
+  scroll: HTMLElement,
+  healthStrip?: HTMLElement,
+  refreshBtn?: HTMLButtonElement,
+): Promise<void> {
+  const card = scroll.closest(".home-panel-card");
+  let strip = healthStrip ?? card?.querySelector<HTMLElement>(".ha-health-strip") ?? undefined;
+  const btn = refreshBtn ?? card?.querySelector<HTMLButtonElement>(".overlay-actions .btn");
+
+  if (btn) btn.disabled = true;
+  if (strip) {
+    strip.className = "ha-health-strip loading";
+    strip.replaceChildren(el("div", "ha-health-summary", "Checking Home Assistant…"));
+  }
   scroll.replaceChildren(el("p", "ha-status-msg", "Loading…"));
+
   try {
-    const data = await fetchHaAreas();
-    renderHomeBody(data, scroll);
+    const [health, areas] = await Promise.all([fetchHaHealth(), fetchHaAreas()]);
+    if (strip) {
+      const rendered = renderHealthStrip(health);
+      strip.replaceWith(rendered);
+      strip = rendered;
+    }
+    renderHomeBody(areas, scroll);
   } catch (err) {
+    if (strip) {
+      strip.className = "ha-health-strip fail";
+      strip.replaceChildren(el("div", "ha-health-line", String(err)));
+    }
     scroll.replaceChildren(el("p", "ha-status-msg", String(err)));
   } finally {
-    refreshBtn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }

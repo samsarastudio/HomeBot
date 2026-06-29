@@ -1,5 +1,6 @@
 import type { Request, Response, Router } from "express";
 import { callHaService, fetchHaAreas, toggleHaArea } from "../homeassistant/areas.js";
+import { fetchHaHealth } from "../homeassistant/health.js";
 import { getHaConfig, haPing } from "../homeassistant/client.js";
 
 function parseAreaAction(action: unknown): "on" | "off" | "toggle" | undefined {
@@ -35,6 +36,14 @@ export function registerHomeAssistantRoutes(router: Router): void {
       return;
     }
     res.json({ configured: true, reachable: await haPing() });
+  });
+
+  router.get("/health", async (_req: Request, res: Response) => {
+    try {
+      res.json(await fetchHaHealth());
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 
   router.get("/areas", async (_req: Request, res: Response) => {

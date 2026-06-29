@@ -208,3 +208,32 @@ export interface HaAreaToggleResponse {
   action: "on" | "off";
   entity_ids: string[];
 }
+
+export interface HaHealthCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface HaHealthResponse {
+  ok: boolean;
+  configured: boolean;
+  url: string;
+  token_source: "env" | "file" | "none";
+  token_path?: string;
+  rest_reachable: boolean;
+  rest_status?: number;
+  auth_ok: boolean;
+  websocket_ok: boolean;
+  states_count: number;
+  controllable_count: number;
+  registry_areas: number;
+  areas_with_devices: number;
+  devices_in_areas: number;
+  areas_config_file: boolean;
+  areas_config_path: string;
+  checks: HaHealthCheck[];
+  error?: string;
+  timestamp: string;
+}

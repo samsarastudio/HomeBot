@@ -1,4 +1,13 @@
-import type { HaAreaToggleResponse, HaAreasResponse } from "@homebot/shared";
+import type { HaAreaToggleResponse, HaAreasResponse, HaHealthResponse } from "@homebot/shared";
+
+export async function fetchHaHealth(): Promise<HaHealthResponse> {
+  const res = await fetch("/api/homeassistant/health");
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string };
+    throw new Error(err.error ?? "Failed to load Home Assistant health");
+  }
+  return res.json() as Promise<HaHealthResponse>;
+}
 
 export async function fetchHaAreas(): Promise<HaAreasResponse> {
   const res = await fetch("/api/homeassistant/areas");
