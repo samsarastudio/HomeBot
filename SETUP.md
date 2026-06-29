@@ -217,6 +217,8 @@ Config file: `~/homebot/deploy/env`
 | Kiosk won't start | Ensure graphical session: `echo $DISPLAY`, start from desktop or set `DISPLAY=:0` |
 | `pnpm install` fails on Pi | Run `npm install -g pnpm` then retry; Node 22+ required |
 | Multiple Chromium windows/tabs | Never launch `chromium` manually; use `kiosk.sh restart` or `systemctl --user restart homebot-kiosk` only |
+| Keyring unlock dialog on boot | Re-run install; kiosk uses `--password-store=basic` and skips GNOME keyring |
+| "Press Esc to exit" on first tap | Update dashboard build; kiosk mode no longer calls browser Fullscreen API |
 | Close button doesn't exit | Re-run install so `deploy/launch-kiosk.sh` is used; Close calls `pkill` on kiosk Chromium |
 | Permission denied on `~/.openclaw` | Run HomeBot as the same user that runs OpenClaw |
 

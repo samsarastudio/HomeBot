@@ -7,6 +7,8 @@ Requires=homebot-server.service
 Type=simple
 EnvironmentFile=%h/homebot/deploy/env
 Environment=DISPLAY=:0
+Environment=CHROME_PASSWORD_STORE=basic
+Environment=GNOME_KEYRING_CONTROL=
 ExecStartPre=%h/homebot/deploy/stop-kiosk.sh
 ExecStart=%h/homebot/deploy/launch-kiosk.sh
 Restart=on-failure

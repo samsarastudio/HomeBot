@@ -1,5 +1,9 @@
 /** Request fullscreen when the browser allows it (fallback when not launched with --kiosk). */
 export function ensureFullscreen(): void {
+  // Chromium --kiosk is already fullscreen; calling requestFullscreen on first tap
+  // shows "Press Esc to exit full screen" on touch-only displays.
+  if (isLikelyKioskMode()) return;
+
   const root = document.documentElement as HTMLElement & {
     webkitRequestFullscreen?: () => Promise<void> | void;
   };
@@ -24,8 +28,9 @@ export function ensureFullscreen(): void {
 }
 
 export function isLikelyKioskMode(): boolean {
-  return (
-    window.matchMedia("(display-mode: fullscreen)").matches ||
-    window.outerHeight >= screen.height - 80
-  );
+  if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+  if (window.outerHeight >= screen.height - 80 && window.outerWidth >= screen.width - 80) {
+    return true;
+  }
+  return false;
 }

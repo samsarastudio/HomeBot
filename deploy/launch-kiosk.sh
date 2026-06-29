@@ -42,6 +42,9 @@ if [[ -z "$CHROMIUM" ]]; then
 fi
 
 export DISPLAY="${DISPLAY:-:0}"
+# Avoid GNOME keyring unlock dialog on headless/touch kiosk boot (no keyboard).
+export CHROME_PASSWORD_STORE="${CHROME_PASSWORD_STORE:-basic}"
+unset GNOME_KEYRING_CONTROL
 mkdir -p "$USER_DATA_DIR"
 
 # Prevent concurrent launches (bot/systemd double-start).
@@ -80,5 +83,6 @@ exec "$CHROMIUM" \
   --overscroll-history-navigation=0 \
   --touch-events=enabled \
   --disable-pinch \
+  --password-store=basic \
   --window-name=HomeBot \
   "$URL"
