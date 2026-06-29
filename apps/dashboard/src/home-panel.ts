@@ -30,16 +30,30 @@ function syncEntityRow(row: HTMLElement, entity: HaEntity): void {
   }
 }
 
-function syncAreaHeader(header: HTMLElement, area: HaArea): void {
-  const onCount = area.entities.filter((e) => e.on).length;
-  const allOn = onCount === area.entities.length && area.entities.length > 0;
+function syncAreaHeader(header: HTMLElement, area: HaArea, forcedOn?: boolean): void {
+  const onCount = area.entities.length > 0
+    ? area.entities.filter((e) => e.on).length
+    : forcedOn === true
+      ? area.entities.length
+      : forcedOn === false
+        ? 0
+        : 0;
+  const allOn = area.entities.length > 0
+    ? onCount === area.entities.length
+    : forcedOn === true;
   const badge = header.querySelector<HTMLElement>(".ha-area-state");
   if (badge) {
-    badge.textContent = areaStateLabel(area);
-    badge.classList.toggle("active", allOn);
-    badge.classList.toggle("mixed", onCount > 0 && !allOn);
+    if (area.entities.length === 0 && forcedOn !== undefined) {
+      badge.textContent = forcedOn ? "ON" : "OFF";
+      badge.classList.toggle("active", forcedOn);
+      badge.classList.toggle("mixed", false);
+    } else {
+      badge.textContent = areaStateLabel(area);
+      badge.classList.toggle("active", allOn);
+      badge.classList.toggle("mixed", onCount > 0 && !allOn);
+    }
   }
-  header.classList.toggle("on", allOn);
+  header.classList.toggle("on", allOn || forcedOn === true);
 }
 
 function renderEntityRow(
@@ -93,7 +107,13 @@ function renderArea(area: HaArea): HTMLElement {
   header.addEventListener("click", async () => {
     header.disabled = true;
     try {
-      const result = await toggleHaArea(area.id);
+      const clickAction =
+        area.entities.length === 0
+          ? header.dataset.areaOn === "true"
+            ? "off"
+            : "on"
+          : "toggle";
+      const result = await toggleHaArea(area.id, clickAction);
       const targetOn = result.action === "on";
       for (const entity of area.entities) {
         entity.on = targetOn;
@@ -101,7 +121,13 @@ function renderArea(area: HaArea): HTMLElement {
         const row = rows.get(entity.entity_id);
         if (row) syncEntityRow(row, entity);
       }
-      syncAreaHeader(header, area);
+      if (area.entities.length === 0) {
+        header.dataset.areaOn = targetOn ? "true" : "false";
+        syncAreaHeader(header, area, targetOn);
+        showToast(targetOn ? `${area.name} on` : `${area.name} off`);
+      } else {
+        syncAreaHeader(header, area);
+      }
     } catch (err) {
       showToast(String(err), "error");
     } finally {
@@ -109,7 +135,8 @@ function renderArea(area: HaArea): HTMLElement {
     }
   });
 
-  section.append(header, list);
+  section.append(header);
+  if (area.entities.length > 0) section.appendChild(list);
   return section;
 }
 
@@ -139,7 +166,7 @@ function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
       el(
         "p",
         "ha-status-msg",
-        "No controllable devices found. Add homeassistant-areas.json to your OpenClaw workspace.",
+        "No areas or devices found. Assign devices to areas in Home Assistant, or add entity IDs to homeassistant-areas.json in your OpenClaw workspace.",
       ),
     );
     return;
