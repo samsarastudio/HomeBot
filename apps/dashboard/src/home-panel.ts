@@ -2,6 +2,14 @@ import type { HaArea, HaAreasResponse, HaHealthResponse } from "@homebot/shared"
 import { callHaService, fetchHaAreas, fetchHaHealth, toggleHaArea } from "./home-api";
 import { showToast } from "./toast";
 
+const POLL_MS = 8_000;
+const POST_ACTION_REFRESH_MS = 450;
+const POST_ACTION_RETRY_MS = 1_500;
+
+interface ReloadOptions {
+  silent?: boolean;
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -11,6 +19,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function areaStateLabel(area: HaArea): "OFF" | "ON" | "MIXED" {
@@ -54,7 +66,78 @@ function renderHealthStrip(health: HaHealthResponse): HTMLElement {
   return strip;
 }
 
-function renderEntityRow(entity: HaArea["entities"][number], scroll: HTMLElement): HTMLElement {
+class HomePanelController {
+  private pollTimer = 0;
+  private reloadQueue: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly scroll: HTMLElement,
+    private readonly refreshBtn: HTMLButtonElement,
+  ) {}
+
+  startPolling(): void {
+    this.stopPolling();
+    this.pollTimer = window.setInterval(() => {
+      void this.reload({ silent: true });
+    }, POLL_MS);
+  }
+
+  stopPolling(): void {
+    window.clearInterval(this.pollTimer);
+    this.pollTimer = 0;
+  }
+
+  async reload(options: ReloadOptions = {}): Promise<void> {
+    this.reloadQueue = this.reloadQueue.then(() => this.reloadNow(options));
+    return this.reloadQueue;
+  }
+
+  async refreshAfterAction(): Promise<void> {
+    await delay(POST_ACTION_REFRESH_MS);
+    await this.reload({ silent: true });
+    await delay(POST_ACTION_RETRY_MS);
+    await this.reload({ silent: true });
+  }
+
+  private async reloadNow(options: ReloadOptions): Promise<void> {
+    const card = this.scroll.closest(".home-panel-card");
+    let strip = card?.querySelector<HTMLElement>(".ha-health-strip") ?? undefined;
+    const scrollTop = this.scroll.scrollTop;
+    const silent = options.silent === true;
+
+    if (!silent) {
+      this.refreshBtn.disabled = true;
+      if (strip) {
+        strip.className = "ha-health-strip loading";
+        strip.replaceChildren(el("div", "ha-health-summary", "Checking Home Assistant…"));
+      }
+      this.scroll.replaceChildren(el("p", "ha-status-msg", "Loading…"));
+    }
+
+    try {
+      const [health, areas] = await Promise.all([fetchHaHealth(), fetchHaAreas()]);
+      if (strip) {
+        const rendered = renderHealthStrip(health);
+        strip.replaceWith(rendered);
+        strip = rendered;
+      }
+      renderHomeBody(areas, this.scroll, this);
+      if (silent) this.scroll.scrollTop = scrollTop;
+    } catch (err) {
+      if (strip) {
+        strip.className = "ha-health-strip fail";
+        strip.replaceChildren(el("div", "ha-health-line", String(err)));
+      }
+      if (!silent) {
+        this.scroll.replaceChildren(el("p", "ha-status-msg", String(err)));
+      }
+    } finally {
+      if (!silent) this.refreshBtn.disabled = false;
+    }
+  }
+}
+
+function renderEntityRow(entity: HaArea["entities"][number], panel: HomePanelController): HTMLElement {
   const row = el("div", `ha-entity-row${entity.on ? " on" : ""}`);
   const label = el("span", "ha-entity-name", entity.name);
   const toggle = el("button", `ha-toggle${entity.on ? " active" : ""}`, entity.on ? "ON" : "OFF");
@@ -66,9 +149,10 @@ function renderEntityRow(entity: HaArea["entities"][number], scroll: HTMLElement
     toggle.disabled = true;
     try {
       await callHaService(entity.entity_id, "toggle");
-      await reloadPanel(scroll);
+      await panel.refreshAfterAction();
     } catch (err) {
       showToast(String(err), "error");
+      await panel.reload({ silent: true });
     } finally {
       toggle.disabled = false;
     }
@@ -77,7 +161,7 @@ function renderEntityRow(entity: HaArea["entities"][number], scroll: HTMLElement
   return row;
 }
 
-function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
+function renderArea(area: HaArea, panel: HomePanelController): HTMLElement {
   const section = el("section", "ha-area");
   const state = areaStateLabel(area);
   const allOn = state === "ON";
@@ -101,16 +185,17 @@ function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
 
   const list = el("div", "ha-entity-list");
   for (const entity of area.entities) {
-    list.appendChild(renderEntityRow(entity, scroll));
+    list.appendChild(renderEntityRow(entity, panel));
   }
 
   header.addEventListener("click", async () => {
     header.disabled = true;
     try {
       await toggleHaArea(area.id, "toggle");
-      await reloadPanel(scroll);
+      await panel.refreshAfterAction();
     } catch (err) {
       showToast(String(err), "error");
+      await panel.reload({ silent: true });
     } finally {
       header.disabled = false;
     }
@@ -120,7 +205,11 @@ function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
   return section;
 }
 
-function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
+function renderHomeBody(
+  data: HaAreasResponse,
+  scroll: HTMLElement,
+  panel: HomePanelController,
+): void {
   scroll.replaceChildren();
 
   if (!data.configured) {
@@ -153,22 +242,18 @@ function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
   }
 
   for (const area of data.areas) {
-    scroll.appendChild(renderArea(area, scroll));
+    scroll.appendChild(renderArea(area, panel));
   }
 }
 
 export function renderHomePanel(onClose: () => void): HTMLElement {
   const backdrop = el("div", "overlay-backdrop home-backdrop");
-  backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) onClose();
-  });
 
   const card = el("div", "overlay-card home-panel-card");
   const header = el("div", "home-panel-header");
   header.appendChild(el("div", "overlay-title", "HOME"));
   const closeBtn = el("button", "home-panel-close", "✕");
   closeBtn.type = "button";
-  closeBtn.addEventListener("click", onClose);
   header.appendChild(closeBtn);
   card.appendChild(header);
 
@@ -183,48 +268,30 @@ export function renderHomePanel(onClose: () => void): HTMLElement {
   const actions = el("div", "overlay-actions");
   const refreshBtn = el("button", "btn btn-dismiss", "REFRESH");
   refreshBtn.type = "button";
-  refreshBtn.addEventListener("click", () => {
-    void reloadPanel(scroll, healthStrip, refreshBtn);
-  });
   actions.appendChild(refreshBtn);
   card.appendChild(actions);
 
+  const panel = new HomePanelController(scroll, refreshBtn);
+
+  const handleClose = () => {
+    panel.stopPolling();
+    onClose();
+  };
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) handleClose();
+  });
+  closeBtn.addEventListener("click", handleClose);
+
+  refreshBtn.addEventListener("click", () => {
+    void panel.reload();
+  });
+
   backdrop.appendChild(card);
-  void reloadPanel(scroll, healthStrip, refreshBtn);
+
+  void panel.reload().then(() => {
+    panel.startPolling();
+  });
+
   return backdrop;
-}
-
-async function reloadPanel(
-  scroll: HTMLElement,
-  healthStrip?: HTMLElement,
-  refreshBtn?: HTMLButtonElement,
-): Promise<void> {
-  const card = scroll.closest(".home-panel-card");
-  let strip = healthStrip ?? card?.querySelector<HTMLElement>(".ha-health-strip") ?? undefined;
-  const btn = refreshBtn ?? card?.querySelector<HTMLButtonElement>(".overlay-actions .btn");
-
-  if (btn) btn.disabled = true;
-  if (strip) {
-    strip.className = "ha-health-strip loading";
-    strip.replaceChildren(el("div", "ha-health-summary", "Checking Home Assistant…"));
-  }
-  scroll.replaceChildren(el("p", "ha-status-msg", "Loading…"));
-
-  try {
-    const [health, areas] = await Promise.all([fetchHaHealth(), fetchHaAreas()]);
-    if (strip) {
-      const rendered = renderHealthStrip(health);
-      strip.replaceWith(rendered);
-      strip = rendered;
-    }
-    renderHomeBody(areas, scroll);
-  } catch (err) {
-    if (strip) {
-      strip.className = "ha-health-strip fail";
-      strip.replaceChildren(el("div", "ha-health-line", String(err)));
-    }
-    scroll.replaceChildren(el("p", "ha-status-msg", String(err)));
-  } finally {
-    if (btn) btn.disabled = false;
-  }
 }
