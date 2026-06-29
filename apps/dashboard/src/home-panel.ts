@@ -13,58 +13,21 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function areaStateLabel(area: HaArea): string {
+function areaStateLabel(area: HaArea): "OFF" | "ON" | "MIXED" {
   const onCount = area.entities.filter((e) => e.on).length;
+  if (area.entities.length === 0) return "OFF";
   if (onCount === 0) return "OFF";
   if (onCount === area.entities.length) return "ON";
   return "MIXED";
 }
 
-function syncEntityRow(row: HTMLElement, entity: HaEntity): void {
-  row.classList.toggle("on", entity.on);
-  const toggle = row.querySelector<HTMLButtonElement>(".ha-toggle");
-  if (toggle) {
-    toggle.classList.toggle("active", entity.on);
-    toggle.textContent = entity.on ? "ON" : "OFF";
-    toggle.setAttribute("aria-pressed", entity.on ? "true" : "false");
-  }
-}
-
-function syncAreaHeader(header: HTMLElement, area: HaArea, forcedOn?: boolean): void {
-  const onCount = area.entities.length > 0
-    ? area.entities.filter((e) => e.on).length
-    : forcedOn === true
-      ? area.entities.length
-      : forcedOn === false
-        ? 0
-        : 0;
-  const allOn = area.entities.length > 0
-    ? onCount === area.entities.length
-    : forcedOn === true;
-  const badge = header.querySelector<HTMLElement>(".ha-area-state");
-  if (badge) {
-    if (area.entities.length === 0 && forcedOn !== undefined) {
-      badge.textContent = forcedOn ? "ON" : "OFF";
-      badge.classList.toggle("active", forcedOn);
-      badge.classList.toggle("mixed", false);
-    } else {
-      badge.textContent = areaStateLabel(area);
-      badge.classList.toggle("active", allOn);
-      badge.classList.toggle("mixed", onCount > 0 && !allOn);
-    }
-  }
-  header.classList.toggle("on", allOn || forcedOn === true);
-}
-
-function renderEntityRow(
-  entity: HaEntity,
-  scroll: HTMLElement,
-): HTMLElement {
+function renderEntityRow(entity: HaEntity, scroll: HTMLElement): HTMLElement {
   const row = el("div", `ha-entity-row${entity.on ? " on" : ""}`);
   const label = el("span", "ha-entity-name", entity.name);
   const toggle = el("button", `ha-toggle${entity.on ? " active" : ""}`, entity.on ? "ON" : "OFF");
   toggle.type = "button";
   toggle.setAttribute("aria-pressed", entity.on ? "true" : "false");
+  toggle.setAttribute("aria-label", `Toggle ${entity.name}`);
   toggle.addEventListener("click", async (e) => {
     e.stopPropagation();
     toggle.disabled = true;
@@ -84,13 +47,24 @@ function renderEntityRow(
 
 function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
   const section = el("section", "ha-area");
-  const onCount = area.entities.filter((e) => e.on).length;
-  const allOn = onCount === area.entities.length && area.entities.length > 0;
+  const state = areaStateLabel(area);
+  const allOn = state === "ON";
 
-  const header = el("button", `ha-area-header${allOn ? " on" : ""}`);
+  const header = el("button", `ha-area-header${allOn ? " on" : state === "MIXED" ? " mixed" : ""}`);
   header.type = "button";
-  header.appendChild(el("span", "ha-area-name", area.name));
-  const badge = el("span", `ha-area-state${allOn ? " active" : onCount > 0 ? " mixed" : ""}`, areaStateLabel(area));
+
+  const titleWrap = el("div", "ha-area-title-wrap");
+  titleWrap.appendChild(el("span", "ha-area-name", area.name));
+  const countLabel =
+    area.entities.length === 1 ? "1 device" : `${area.entities.length} devices`;
+  titleWrap.appendChild(el("span", "ha-area-count", countLabel));
+  header.appendChild(titleWrap);
+
+  const badge = el(
+    "span",
+    `ha-area-state${allOn ? " active" : state === "MIXED" ? " mixed" : ""}`,
+    state,
+  );
   header.appendChild(badge);
 
   const list = el("div", "ha-entity-list");
@@ -101,13 +75,7 @@ function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
   header.addEventListener("click", async () => {
     header.disabled = true;
     try {
-      const clickAction =
-        area.entities.length === 0
-          ? areaStateLabel(area) === "ON"
-            ? "off"
-            : "on"
-          : "toggle";
-      await toggleHaArea(area.id, clickAction);
+      await toggleHaArea(area.id, "toggle");
       const data = await fetchHaAreas();
       renderHomeBody(data, scroll);
     } catch (err) {
@@ -117,8 +85,7 @@ function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
     }
   });
 
-  section.append(header);
-  if (area.entities.length > 0) section.appendChild(list);
+  section.append(header, list);
   return section;
 }
 
@@ -148,7 +115,7 @@ function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
       el(
         "p",
         "ha-status-msg",
-        "No areas or devices found. Assign devices to areas in Home Assistant, or add entity IDs to homeassistant-areas.json in your OpenClaw workspace.",
+        "No controllable devices found. Assign lights and switches to areas in Home Assistant.",
       ),
     );
     return;

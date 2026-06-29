@@ -3,59 +3,21 @@ import { join } from "node:path";
 import type { HaArea, HaAreasResponse, HaEntity } from "@homebot/shared";
 import { getWorkspaceRoot } from "../openclaw/state-root.js";
 import { getHaConfig, haFetch } from "./client.js";
+import {
+  areaActionFromEntities,
+  areaToggleTarget,
+  isControllableDomain,
+  mergeRegistryAreas,
+  toHaEntity,
+  type AreaRegistryEntry,
+  type DeviceRegistryEntry,
+  type EntityRegistryEntry,
+  type HaStateLike,
+} from "./area-merge.js";
 import { haCallWsAll } from "./websocket.js";
-
-const CONTROLLABLE = new Set([
-  "light",
-  "switch",
-  "fan",
-  "input_boolean",
-  "cover",
-  "outlet",
-  "group",
-]);
-
-interface HaState {
-  entity_id: string;
-  state: string;
-  attributes?: { friendly_name?: string };
-}
-
-interface AreaRegistryEntry {
-  area_id: string;
-  name: string;
-}
-
-interface EntityRegistryEntry {
-  entity_id: string;
-  area_id: string | null;
-  device_id: string | null;
-}
-
-interface DeviceRegistryEntry {
-  id: string;
-  area_id: string | null;
-}
 
 interface AreasConfigFile {
   areas?: Array<{ id?: string; name: string; entities?: string[] }>;
-}
-
-function isOn(state: string): boolean {
-  const s = state.toLowerCase();
-  return s === "on" || s === "open" || s === "true";
-}
-
-function toEntity(state: HaState): HaEntity {
-  const domain = state.entity_id.split(".")[0] ?? "";
-  const name = state.attributes?.friendly_name ?? state.entity_id;
-  return {
-    entity_id: state.entity_id,
-    name,
-    domain,
-    state: state.state,
-    on: isOn(state.state),
-  };
 }
 
 function areasConfigPath(): string {
@@ -72,23 +34,24 @@ function loadAreasConfig(): AreasConfigFile | null {
   }
 }
 
-async function fetchStates(): Promise<Map<string, HaState>> {
+async function fetchStates(): Promise<Map<string, HaStateLike>> {
   const res = await haFetch("/api/states");
   if (!res.ok) throw new Error(`HA states failed: ${res.status}`);
-  const states = (await res.json()) as HaState[];
-  const map = new Map<string, HaState>();
+  const states = (await res.json()) as HaStateLike[];
+  const map = new Map<string, HaStateLike>();
   for (const s of states) map.set(s.entity_id, s);
   return map;
 }
 
-function buildFromConfig(cfg: AreasConfigFile, states: Map<string, HaState>): HaArea[] {
+function buildFromConfig(cfg: AreasConfigFile, states: Map<string, HaStateLike>): HaArea[] {
   const areas: HaArea[] = [];
   for (const area of cfg.areas ?? []) {
     const entities: HaEntity[] = [];
     for (const eid of area.entities ?? []) {
       const st = states.get(eid);
-      if (st) entities.push(toEntity(st));
+      if (st && isControllableDomain(eid)) entities.push(toHaEntity(st));
     }
+    if (entities.length === 0) continue;
     areas.push({
       id: area.id ?? area.name.toLowerCase().replace(/\s+/g, "-"),
       name: area.name,
@@ -98,99 +61,67 @@ function buildFromConfig(cfg: AreasConfigFile, states: Map<string, HaState>): Ha
   return areas;
 }
 
-function buildFromAllStates(states: Map<string, HaState>): HaArea[] {
+function buildFromAllStates(states: Map<string, HaStateLike>): HaArea[] {
   const entities: HaEntity[] = [];
   for (const st of states.values()) {
-    const domain = st.entity_id.split(".")[0] ?? "";
-    if (!CONTROLLABLE.has(domain) || st.state === "unavailable") continue;
-    entities.push(toEntity(st));
+    if (!isControllableDomain(st.entity_id) || st.state === "unavailable") continue;
+    entities.push(toHaEntity(st));
   }
   entities.sort((a, b) => a.name.localeCompare(b.name));
   if (entities.length === 0) return [];
   return [{ id: "all", name: "Devices", entities }];
 }
 
-function resolveEntityAreaId(
-  ent: EntityRegistryEntry,
-  deviceAreas: Map<string, string>,
-  areaNames: Map<string, string>,
-): string | null {
-  if (ent.area_id && areaNames.has(ent.area_id)) return ent.area_id;
-  if (ent.device_id) {
-    const deviceArea = deviceAreas.get(ent.device_id);
-    if (deviceArea && areaNames.has(deviceArea)) return deviceArea;
-  }
-  return null;
-}
-
-function mergeRegistryAreas(
-  areaList: AreaRegistryEntry[],
-  entList: EntityRegistryEntry[],
-  deviceList: DeviceRegistryEntry[],
-  states: Map<string, HaState>,
-): HaArea[] {
-  const areaNames = new Map<string, string>();
-  for (const a of areaList) areaNames.set(a.area_id, a.name);
-
-  const deviceAreas = new Map<string, string>();
-  for (const d of deviceList) {
-    if (d.area_id) deviceAreas.set(d.id, d.area_id);
-  }
-
-  const byArea = new Map<string, HaEntity[]>();
-  for (const a of areaList) byArea.set(a.area_id, []);
-
-  const other: HaEntity[] = [];
-
-  for (const ent of entList) {
-    const domain = ent.entity_id.split(".")[0] ?? "";
-    if (!CONTROLLABLE.has(domain)) continue;
-    const st = states.get(ent.entity_id);
-    if (!st || st.state === "unavailable") continue;
-    const entity = toEntity(st);
-    const areaId = resolveEntityAreaId(ent, deviceAreas, areaNames);
-    if (areaId) {
-      const list = byArea.get(areaId) ?? [];
-      list.push(entity);
-      byArea.set(areaId, list);
-    } else {
-      other.push(entity);
-    }
-  }
-
-  const areas: HaArea[] = [];
-  for (const [areaId, entities] of byArea) {
-    entities.sort((a, b) => a.name.localeCompare(b.name));
-    areas.push({ id: areaId, name: areaNames.get(areaId) ?? areaId, entities });
-  }
-  areas.sort((a, b) => a.name.localeCompare(b.name));
-
-  if (other.length > 0) {
-    other.sort((a, b) => a.name.localeCompare(b.name));
-    areas.push({ id: "other", name: "Other", entities: other });
-  }
-
-  return areas;
-}
-
-async function buildFromHaRegistry(states: Map<string, HaState>): Promise<HaArea[]> {
+async function buildFromHaRegistry(states: Map<string, HaStateLike>): Promise<HaArea[]> {
   try {
     const [areaList, entList, deviceList] = await haCallWsAll([
       "config/area_registry/list",
       "config/entity_registry/list",
       "config/device_registry/list",
     ]);
-    const areas = mergeRegistryAreas(
+    return mergeRegistryAreas(
       areaList as AreaRegistryEntry[],
       entList as EntityRegistryEntry[],
       deviceList as DeviceRegistryEntry[],
       states,
     );
-    if (areas.length > 0) return areas;
   } catch {
-    /* fall through */
+    return buildFromAllStates(states);
   }
-  return buildFromAllStates(states);
+}
+
+function mergeConfigWithRegistry(configAreas: HaArea[], registryAreas: HaArea[]): HaArea[] {
+  if (configAreas.length === 0) return registryAreas;
+  const byId = new Map(registryAreas.map((a) => [a.id, { ...a, entities: [...a.entities] }]));
+  const byName = new Map(registryAreas.map((a) => [a.name.toLowerCase(), a.id]));
+
+  for (const cfg of configAreas) {
+    const key = cfg.id ?? byName.get(cfg.name.toLowerCase()) ?? cfg.name.toLowerCase().replace(/\s+/g, "-");
+    const existing = byId.get(key);
+    if (existing) {
+      const seen = new Set(existing.entities.map((e) => e.entity_id));
+      for (const ent of cfg.entities) {
+        if (!seen.has(ent.entity_id)) existing.entities.push(ent);
+      }
+      existing.entities.sort((a, b) => a.name.localeCompare(b.name));
+      continue;
+    }
+    byId.set(key, cfg);
+  }
+
+  return [...byId.values()]
+    .filter((a) => a.entities.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function resolveAreas(states: Map<string, HaStateLike>): Promise<HaArea[]> {
+  const registryAreas = await buildFromHaRegistry(states);
+  const fileCfg = loadAreasConfig();
+  if (!fileCfg?.areas?.length) return registryAreas;
+
+  const configAreas = buildFromConfig(fileCfg, states);
+  if (configAreas.length === 0) return registryAreas;
+  return mergeConfigWithRegistry(configAreas, registryAreas);
 }
 
 const AREA_ON_SERVICES = [
@@ -229,19 +160,17 @@ export async function callHaAreaTarget(areaId: string, action: "on" | "off"): Pr
   throw new Error(String((firstErr as PromiseRejectedResult | undefined)?.reason ?? "HA area service failed"));
 }
 
-async function resolveAreas(states: Map<string, HaState>): Promise<HaArea[]> {
-  const fileCfg = loadAreasConfig();
-  if (fileCfg?.areas?.length) {
-    const fromConfig = buildFromConfig(fileCfg, states);
-    const hasEntities = fromConfig.some((a) => a.entities.length > 0);
-    if (hasEntities) return fromConfig.filter((a) => a.entities.length > 0);
+async function callHaEntities(entities: HaEntity[], action: "on" | "off"): Promise<void> {
+  const results = await Promise.allSettled(
+    entities.map((e) => callHaService(e.entity_id, action)),
+  );
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length === results.length) {
+    throw new Error(String((failed[0] as PromiseRejectedResult).reason));
   }
-  return buildFromHaRegistry(states);
-}
-
-function areaActionFromEntities(entities: HaEntity[]): "on" | "off" {
-  if (entities.length === 0) return "off";
-  return entities.every((e) => e.on) ? "on" : "off";
+  if (failed.length > 0) {
+    throw new Error(`${failed.length} of ${results.length} devices failed`);
+  }
 }
 
 export async function fetchHaAreas(): Promise<HaAreasResponse> {
@@ -284,8 +213,15 @@ export async function callHaService(
   let service: string;
 
   if (action === "toggle") {
-    serviceDomain = "homeassistant";
-    service = "toggle";
+    if (domain === "cover") {
+      serviceDomain = "cover";
+      service = "toggle_cover";
+    } else if (isControllableDomain(entityId)) {
+      service = "toggle";
+    } else {
+      serviceDomain = "homeassistant";
+      service = "toggle";
+    }
   } else if (action === "on") {
     service = domain === "cover" ? "open_cover" : "turn_on";
   } else {
@@ -314,18 +250,27 @@ export async function toggleHaArea(
   if (action === "on" || action === "off") {
     target = action;
   } else if (area.entities.length > 0) {
-    target = areaActionFromEntities(area.entities) === "on" ? "off" : "on";
+    target = areaToggleTarget(area.entities);
   } else {
     target = "on";
   }
 
-  await callHaAreaTarget(areaId, target);
+  if (area.entities.length > 0) {
+    try {
+      await callHaEntities(area.entities, target);
+    } catch {
+      await callHaAreaTarget(areaId, target);
+    }
+  } else {
+    await callHaAreaTarget(areaId, target);
+  }
 
   const after = await fetchHaAreas();
   const updated = after.areas.find((a) => a.id === areaId);
   const entity_ids = updated?.entities.map((e) => e.entity_id) ?? [];
   if (updated && updated.entities.length > 0) {
-    return { action: areaActionFromEntities(updated.entities), entity_ids };
+    const state = areaActionFromEntities(updated.entities);
+    return { action: state === "off" ? "off" : "on", entity_ids };
   }
   return { action: target, entity_ids };
 }

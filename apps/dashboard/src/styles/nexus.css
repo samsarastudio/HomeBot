@@ -789,6 +789,11 @@ body {
   background: rgba(52, 211, 153, 0.1);
 }
 
+.ha-area-header.mixed {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
 .ha-area-header:disabled {
   opacity: 0.55;
   cursor: wait;
@@ -800,6 +805,21 @@ body {
   letter-spacing: 0.12em;
   color: var(--accent-pink);
   text-transform: uppercase;
+}
+
+.ha-area-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ha-area-count {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: none;
+  font-family: inherit;
 }
 
 .ha-area-state {
@@ -845,6 +865,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin: 0 0 4px 10px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(168, 85, 247, 0.25);
 }
 
 .ha-entity-row {
