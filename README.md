@@ -14,7 +14,13 @@ chmod +x deploy/install-pi.sh
 systemctl --user start homebot-kiosk
 ```
 
-Then copy `skills/daily-plan` into `~/.openclaw/workspace/skills/` and ensure today's `memory/YYYY-MM-DD.md` has a `## Plan` section (see SETUP.md).
+Then sync the OpenClaw workspace (skills + lean AGENTS):
+
+```bash
+~/homebot/deploy/sync-openclaw-workspace.sh
+```
+
+Or run full install — see [SETUP.md](SETUP.md).
 
 ## Features
 

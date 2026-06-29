@@ -68,7 +68,7 @@ fi
   fi
 } > "$ENV_FILE"
 
-chmod +x "$HOMEBOT_DIR/deploy/launch-kiosk.sh" "$HOMEBOT_DIR/deploy/stop-kiosk.sh" "$HOMEBOT_DIR/deploy/kiosk.sh"
+chmod +x "$HOMEBOT_DIR/deploy/launch-kiosk.sh" "$HOMEBOT_DIR/deploy/stop-kiosk.sh" "$HOMEBOT_DIR/deploy/kiosk.sh" "$HOMEBOT_DIR/deploy/sync-openclaw-workspace.sh"
 
 # systemd user units
 mkdir -p "$HOME/.config/systemd/user"
@@ -83,6 +83,10 @@ systemctl --user enable homebot-server.service
 systemctl --user restart homebot-server.service
 
 echo ""
+echo "==> Syncing OpenClaw workspace (skills + lean AGENTS snippet)"
+"$HOMEBOT_DIR/deploy/sync-openclaw-workspace.sh" || true
+
+echo ""
 echo "Installed. Server: systemctl --user status homebot-server"
 echo "Start kiosk:      systemctl --user start homebot-kiosk"
 if [[ -n "${TOKEN:-}" ]]; then
@@ -91,5 +95,6 @@ else
   echo "Kiosk URL:        http://127.0.0.1:8080/"
 fi
 echo ""
-echo "Copy skills to your OpenClaw workspace:"
-echo "  cp -r $HOMEBOT_DIR/skills/daily-plan $STATE_DIR/workspace/skills/"
+echo "OpenClaw workspace synced (skills + AGENTS snippet)."
+echo "Full lean AGENTS reset:  $HOMEBOT_DIR/deploy/sync-openclaw-workspace.sh --replace-agents"
+echo "See openclaw/README.md for context budget tips."

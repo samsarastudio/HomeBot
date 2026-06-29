@@ -1,0 +1,9 @@
+{
+  "_comment": "Optional OpenClaw config — patch only if your version allows (contextInjection is protected).",
+  "agents": {
+    "defaults": {
+      "bootstrapTotalMaxChars": 40000,
+      "bootstrapMaxChars": 15000
+    }
+  }
+}

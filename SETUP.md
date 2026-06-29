@@ -75,18 +75,27 @@ HOMEBOT_DIR=~/homebot ./deploy/install-pi.sh
 
 ## Post-install steps (required)
 
-### 1. Install the daily-plan skill
+### 1. Sync OpenClaw workspace (skills + lean AGENTS)
 
-So the agent keeps today's todos in the correct format:
+Keeps bootstrap context small: detailed rules live in **skills** (loaded on demand), not a 300-line AGENTS.md.
 
 ```bash
-mkdir -p ~/.openclaw/workspace/skills
-cp -r ~/homebot/skills/daily-plan ~/.openclaw/workspace/skills/
+~/homebot/deploy/sync-openclaw-workspace.sh
 ```
 
-### 2. Tell the agent to maintain the plan
+This copies `daily-plan`, `homebot-events`, `homebot-media`, and `homebot-setup` into `~/.openclaw/workspace/skills/` and merges a compact HomeBot section into `AGENTS.md`.
 
-Add to `~/.openclaw/workspace/AGENTS.md` or `HEARTBEAT.md`:
+For a full lean AGENTS reset (backs up first):
+
+```bash
+~/homebot/deploy/sync-openclaw-workspace.sh --replace-agents
+```
+
+See [openclaw/README.md](openclaw/README.md) for context budget notes.
+
+### 2. Tell the agent to maintain the plan (if not using sync script)
+
+If you manage AGENTS.md manually, add only this — full format is in `skills/daily-plan/SKILL.md`:
 
 ```markdown
 ## HomeBot dashboard
@@ -182,11 +191,10 @@ Git URL: <GIT_URL>
 Follow SETUP.md in the repo exactly:
 1. Verify openclaw-gateway is running and Node 22+ is installed
 2. git clone, run deploy/install-pi.sh
-3. Copy skills/daily-plan into ~/.openclaw/workspace/skills/
-4. Add HomeBot plan instructions to AGENTS.md or HEARTBEAT.md
-5. Ensure today's memory/YYYY-MM-DD.md has a ## Plan section with checkbox items
-6. systemctl --user start homebot-kiosk
-7. Verify with curl http://127.0.0.1:8080/api/plan and report the URL to open the dashboard
+3. Run deploy/sync-openclaw-workspace.sh (skills + lean AGENTS snippet)
+4. Ensure today's memory/YYYY-MM-DD.md has a ## Plan section with checkbox items
+5. systemctl --user start homebot-kiosk
+6. Verify with curl http://127.0.0.1:8080/api/plan and report the URL to open the dashboard
 
 Do not stop or reconfigure openclaw-gateway unless it is not running.
 Install target directory: ~/homebot

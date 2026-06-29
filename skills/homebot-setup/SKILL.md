@@ -16,8 +16,8 @@ Open `SETUP.md` in the cloned repository. Follow it step by step.
 1. **Verify:** `systemctl --user status openclaw-gateway` is active; `node --version` is 22+
 2. **Clone:** `git clone <GIT_URL> ~/homebot-src && cd ~/homebot-src`
 3. **Install:** `chmod +x deploy/install-pi.sh && ./deploy/install-pi.sh`
-4. **Skill:** `cp -r ~/homebot/skills/daily-plan ~/.openclaw/workspace/skills/`
-5. **Agent docs:** Add `## HomeBot dashboard` section to `AGENTS.md` (see SETUP.md)
+4. **Workspace:** `~/homebot/deploy/sync-openclaw-workspace.sh` (skills + lean AGENTS)
+5. **Agent docs:** optional — sync script merges HomeBot section into AGENTS.md
 6. **Plan file:** Ensure `~/.openclaw/workspace/memory/<today>.md` has `## Plan` with `- [ ]` items
 7. **Kiosk:** `~/homebot/deploy/kiosk.sh restart` — **never** run `chromium` manually
 8. **Verify:** `~/homebot/deploy/kiosk.sh status` shows one process; `curl -s http://127.0.0.1:8080/api/plan`
