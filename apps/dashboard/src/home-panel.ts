@@ -58,8 +58,7 @@ function syncAreaHeader(header: HTMLElement, area: HaArea, forcedOn?: boolean): 
 
 function renderEntityRow(
   entity: HaEntity,
-  area: HaArea,
-  header: HTMLElement,
+  scroll: HTMLElement,
 ): HTMLElement {
   const row = el("div", `ha-entity-row${entity.on ? " on" : ""}`);
   const label = el("span", "ha-entity-name", entity.name);
@@ -71,10 +70,8 @@ function renderEntityRow(
     toggle.disabled = true;
     try {
       await callHaService(entity.entity_id, "toggle");
-      entity.on = !entity.on;
-      entity.state = entity.on ? "on" : "off";
-      syncEntityRow(row, entity);
-      syncAreaHeader(header, area);
+      const data = await fetchHaAreas();
+      renderHomeBody(data, scroll);
     } catch (err) {
       showToast(String(err), "error");
     } finally {
@@ -85,7 +82,7 @@ function renderEntityRow(
   return row;
 }
 
-function renderArea(area: HaArea): HTMLElement {
+function renderArea(area: HaArea, scroll: HTMLElement): HTMLElement {
   const section = el("section", "ha-area");
   const onCount = area.entities.filter((e) => e.on).length;
   const allOn = onCount === area.entities.length && area.entities.length > 0;
@@ -97,11 +94,8 @@ function renderArea(area: HaArea): HTMLElement {
   header.appendChild(badge);
 
   const list = el("div", "ha-entity-list");
-  const rows = new Map<string, HTMLElement>();
   for (const entity of area.entities) {
-    const row = renderEntityRow(entity, area, header);
-    rows.set(entity.entity_id, row);
-    list.appendChild(row);
+    list.appendChild(renderEntityRow(entity, scroll));
   }
 
   header.addEventListener("click", async () => {
@@ -109,25 +103,13 @@ function renderArea(area: HaArea): HTMLElement {
     try {
       const clickAction =
         area.entities.length === 0
-          ? header.dataset.areaOn === "true"
+          ? areaStateLabel(area) === "ON"
             ? "off"
             : "on"
           : "toggle";
-      const result = await toggleHaArea(area.id, clickAction);
-      const targetOn = result.action === "on";
-      for (const entity of area.entities) {
-        entity.on = targetOn;
-        entity.state = targetOn ? "on" : "off";
-        const row = rows.get(entity.entity_id);
-        if (row) syncEntityRow(row, entity);
-      }
-      if (area.entities.length === 0) {
-        header.dataset.areaOn = targetOn ? "true" : "false";
-        syncAreaHeader(header, area, targetOn);
-        showToast(targetOn ? `${area.name} on` : `${area.name} off`);
-      } else {
-        syncAreaHeader(header, area);
-      }
+      await toggleHaArea(area.id, clickAction);
+      const data = await fetchHaAreas();
+      renderHomeBody(data, scroll);
     } catch (err) {
       showToast(String(err), "error");
     } finally {
@@ -173,7 +155,7 @@ function renderHomeBody(data: HaAreasResponse, scroll: HTMLElement): void {
   }
 
   for (const area of data.areas) {
-    scroll.appendChild(renderArea(area));
+    scroll.appendChild(renderArea(area, scroll));
   }
 }
 
